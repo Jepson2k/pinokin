@@ -1,0 +1,12 @@
+name: pinokin
+channels:
+  - conda-forge
+dependencies:
+  - python=3.13
+  - pinocchio
+  - eigen
+  - nanobind
+  - numpy>=2.0
+  - cmake
+  - scikit-build-core
+  - pytest
