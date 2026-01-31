@@ -1,0 +1,16 @@
+name: Tests
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash -l {0}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: conda-incubator/setup-miniconda@v3
+        with:
+          environment-file: environment.yml
+          miniforge-version: latest
+      - run: pip install -e ".[dev]" --no-build-isolation
+      - run: pytest tests/ -v
