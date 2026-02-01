@@ -30,6 +30,7 @@ public:
     int nq() const { return static_cast<int>(model_.nq); }
     const Eigen::VectorXd& lower_limits() const { return model_.lowerPositionLimit; }
     const Eigen::VectorXd& upper_limits() const { return model_.upperPositionLimit; }
+    const Eigen::VectorXd& velocity_limits() const { return model_.velocityLimit; }
     void set_ee_frame(const std::string& name);
 
     void set_tool_transform(const Eigen::Matrix4d& T_tool);

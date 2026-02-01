@@ -40,6 +40,8 @@ NB_MODULE(_core, m) {
                      nb::rv_policy::reference_internal)
         .def_prop_ro("upper_limits", &Robot::upper_limits,
                      nb::rv_policy::reference_internal)
+        .def_prop_ro("velocity_limits", &Robot::velocity_limits,
+                     nb::rv_policy::reference_internal)
         .def_prop_ro("qlim", [](const Robot& r) {
             Eigen::MatrixXd qlim(2, r.nq());
             qlim.row(0) = r.lower_limits();
