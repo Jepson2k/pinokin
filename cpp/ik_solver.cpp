@@ -37,6 +37,8 @@ IKSolver::IKSolver(const Robot& robot, Method method, Damping damping,
     Te_ = Eigen::Matrix4d::Identity();
     q_.resize(n);
     q_.setZero();
+    q0_.resize(n);
+    q0_.setZero();
     success_ = false;
     residual_ = 0.0;
     iterations_ = 0;
@@ -60,8 +62,10 @@ bool IKSolver::solve(const Eigen::Matrix4d& Tep, const Eigen::VectorXd* q0) {
 
     if (q0 && q0->size() == robot_.nq()) {
         q_ = *q0;
+        q0_ = *q0;
     } else {
         rand_q();
+        q0_ = q_;
     }
 
     switch (method_) {
@@ -244,6 +248,9 @@ void IKSolver::solve_lm(const Eigen::Matrix4d& Tep) {
 }
 
 // ===== Wrap solution angles to stay within joint limits =====
+// For each joint, tries q, q±2π, and wrapToPi(q). Among all variants that
+// fall within limits, picks the one closest to q0_ (the seed) to minimize
+// unnecessary joint motion. This replaces the old separate unwrap_angles step.
 void IKSolver::wrap_to_limits() {
     const auto& ql = robot_.lower_limits();
     const auto& qh = robot_.upper_limits();
@@ -252,21 +259,28 @@ void IKSolver::wrap_to_limits() {
         double q_orig = q_(i);
         double ql_min = ql(i);
         double ql_max = qh(i);
+        double q0i = q0_(i);
 
-        if (q_orig >= ql_min && q_orig <= ql_max) {
-            continue;
+        // Candidates: original, ±2π, wrapToPi
+        double candidates[4] = {q_orig, q_orig + PI_x2, q_orig - PI_x2, wrapToPi(q_orig)};
+
+        double best = q_orig;
+        double best_dist = std::numeric_limits<double>::max();
+        bool found = false;
+
+        for (int c = 0; c < 4; c++) {
+            if (candidates[c] >= ql_min && candidates[c] <= ql_max) {
+                double dist = std::abs(candidates[c] - q0i);
+                if (dist < best_dist) {
+                    best_dist = dist;
+                    best = candidates[c];
+                    found = true;
+                }
+            }
         }
 
-        double q_wrapped_pos = q_orig + PI_x2;
-        double q_wrapped_neg = q_orig - PI_x2;
-        double q_wrapped_std = wrapToPi(q_orig);
-
-        if (q_wrapped_pos >= ql_min && q_wrapped_pos <= ql_max) {
-            q_(i) = q_wrapped_pos;
-        } else if (q_wrapped_neg >= ql_min && q_wrapped_neg <= ql_max) {
-            q_(i) = q_wrapped_neg;
-        } else if (q_wrapped_std >= ql_min && q_wrapped_std <= ql_max) {
-            q_(i) = q_wrapped_std;
+        if (found) {
+            q_(i) = best;
         }
     }
 }
@@ -394,24 +408,6 @@ IKSolver::BatchResult IKSolver::batch_ik(
     }
 
     return result;
-}
-
-// ===== unwrap_angles =====
-// Ported from parol6/utils/ik.py:93-108
-Eigen::VectorXd IKSolver::unwrap_angles(const Eigen::VectorXd& q_solution,
-                                         const Eigen::VectorXd& q_current) {
-    Eigen::VectorXd q_unwrapped = q_solution;
-    Eigen::VectorXd diff = q_solution - q_current;
-
-    for (int i = 0; i < diff.size(); ++i) {
-        if (diff(i) > PI) {
-            q_unwrapped(i) -= PI_x2;
-        } else if (diff(i) < -PI) {
-            q_unwrapped(i) += PI_x2;
-        }
-    }
-
-    return q_unwrapped;
 }
 
 } // namespace pinokin

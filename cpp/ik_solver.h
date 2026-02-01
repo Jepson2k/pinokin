@@ -30,9 +30,6 @@ public:
     BatchResult batch_ik(const std::vector<Eigen::Matrix4d>& poses,
                          const Eigen::VectorXd& q_start);
 
-    static Eigen::VectorXd unwrap_angles(const Eigen::VectorXd& q_solution,
-                                         const Eigen::VectorXd& q_current);
-
     // Results (valid after solve())
     const Eigen::VectorXd& q() const { return q_; }
     bool success() const { return success_; }
@@ -63,6 +60,7 @@ private:
 
     // Results
     Eigen::VectorXd q_;
+    Eigen::VectorXd q0_;  // seed for wrap_to_limits proximity
     bool success_;
     double residual_;
     int iterations_;

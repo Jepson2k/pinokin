@@ -88,16 +88,19 @@ def test_task_space_weighting(robot):
     np.testing.assert_allclose(T_result[:3, 3], T[:3, 3], atol=1e-4)
 
 
-def test_unwrap_angles():
-    """unwrap_angles should minimize displacement."""
-    q_solution = np.array([3.5, -3.5, 0.0, 1.0, 0.0, 0.0])
-    q_current = np.array([0.0, 0.0, 0.0, 1.0, 0.0, 0.0])
-    q_unwrapped = IKSolver.unwrap_angles(q_solution, q_current)
+def test_wrap_to_limits_prefers_q0(robot):
+    """wrap_to_limits should prefer the ±2π variant closest to q0."""
+    ql = robot.lower_limits
+    qu = robot.upper_limits
+    q0 = (ql + qu) / 2
+    T = robot.fkine(q0)
 
-    # |q_unwrapped - q_current| should be <= |q_solution - q_current|
-    dist_original = np.abs(q_solution - q_current)
-    dist_unwrapped = np.abs(q_unwrapped - q_current)
-    assert np.all(dist_unwrapped <= dist_original + 1e-10)
+    solver = IKSolver(robot, tol=1e-10, max_iter=50, max_restarts=10)
+    solver.solve(T, q0=q0)
+    assert solver.success
+
+    # Solution should be close to q0 (no unnecessary 2π jumps)
+    assert np.max(np.abs(solver.q - q0)) < 0.1
 
 
 def test_solver_result_properties(robot):
