@@ -4,7 +4,7 @@ import pytest
 
 from pinokin import Robot, IKSolver
 
-URDF_PATH = str(Path(__file__).parent.parent / "data" / "parol6.urdf")
+URDF_PATH = str(Path(__file__).parent / "parol6.urdf")
 
 
 @pytest.fixture(scope="session")

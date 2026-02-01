@@ -21,7 +21,7 @@ pytest tests/ -v
 - `cpp/bindings.cpp` — nanobind Python bindings
 - `src/pinokin/__init__.py` — Python package entry point
 - `src/pinokin/_core.pyi` — type stubs for IDE support
-- `data/parol6.urdf` — test URDF (PAROL6 robot)
+- `tests/parol6.urdf` — test URDF (PAROL6 robot)
 
 ## C++ namespace
 

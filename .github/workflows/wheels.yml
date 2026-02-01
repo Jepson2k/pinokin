@@ -12,8 +12,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # os + python cross-product gives 20 jobs; include adds arch per os
-        os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest, macos-15-intel, windows-latest]
+        # os + python cross-product; include adds arch metadata per os
+        os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest, windows-latest]
         python: ["3.11", "3.12", "3.13", "3.14"]
         include:
           - os: ubuntu-latest
@@ -22,8 +22,6 @@ jobs:
             arch: aarch64
           - os: macos-latest
             arch: arm64
-          - os: macos-15-intel
-            arch: x86_64
           - os: windows-latest
             arch: AMD64
     runs-on: ${{ matrix.os }}
@@ -35,8 +33,8 @@ jobs:
 
       - uses: conda-incubator/setup-miniconda@v3
         with:
+          environment-file: environment.yml
           miniforge-version: latest
-          channels: conda-forge
           python-version: ${{ matrix.python }}
 
       - name: Sync version to release tag
@@ -53,10 +51,6 @@ jobs:
           with open("pyproject.toml", "w") as f:
               f.write(content)
 
-      - name: Install build dependencies
-        run: |
-          conda install -y pinocchio eigen nanobind "numpy>=2.0" cmake scikit-build-core
-
       - name: Install wheel repair tool
         run: |
           if [[ "$RUNNER_OS" == "Linux" ]]; then
@@ -72,7 +66,6 @@ jobs:
 
       # Repair bundles shared libs (libpinocchio, libboost, etc.) into the wheel
       # so users can pip install without needing conda/pinocchio on their system.
-      # Each platform has its own repair tool and shell requirements.
 
       - name: Repair wheel (Linux)
         if: runner.os == 'Linux'
@@ -88,10 +81,9 @@ jobs:
 
       - name: Repair wheel (Windows)
         if: runner.os == 'Windows'
-        shell: cmd
         run: |
-          mkdir dist
-          for %%f in (raw-dist\*.whl) do delvewheel repair --add-path %CONDA_PREFIX%\Library\bin -w dist\ "%%f"
+          mkdir -p dist
+          python -m delvewheel repair --add-path "$CONDA_PREFIX/Library/bin" -w dist/ raw-dist/*.whl
 
       - name: Test wheel
         run: |

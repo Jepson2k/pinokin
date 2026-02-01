@@ -2,7 +2,6 @@ name: pinokin
 channels:
   - conda-forge
 dependencies:
-  - python=3.13
   - pinocchio
   - eigen
   - nanobind

@@ -12,16 +12,6 @@ pip install pinokin
 
 Pre-built wheels are available on [GitHub Releases](https://github.com/Jepson2k/pinokin/releases).
 
-## Platforms
-
-Wheels are built for Python 3.11-3.14:
-
-| | x86_64 | ARM64 |
-|---|---|---|
-| Linux | manylinux_2_35 | manylinux_2_35 |
-| macOS | Intel | Apple Silicon |
-| Windows | AMD64 | — |
-
 ## Usage
 
 ```python
