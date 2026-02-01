@@ -37,7 +37,7 @@ def test_batch_ik_round_trip(robot):
         poses.append(robot.fkine(q_configs[i]))
 
     q_start = q_configs[0]
-    solver = IKSolver(robot, max_restarts=200)
+    solver = IKSolver(robot, tol=1e-12, max_restarts=200)
     result = solver.batch_ik(poses, q_start)
 
     assert result.joint_positions.shape == (N, robot.nq)
