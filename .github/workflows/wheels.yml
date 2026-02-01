@@ -12,23 +12,20 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # os + python cross-product gives 20 jobs; include adds arch per os
+        os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest, macos-15-intel, windows-latest]
+        python: ["3.11", "3.12", "3.13", "3.14"]
         include:
           - os: ubuntu-latest
             arch: x86_64
-            repair: auditwheel repair --plat manylinux_2_35_x86_64 -w dist/
           - os: ubuntu-24.04-arm
             arch: aarch64
-            repair: auditwheel repair --plat manylinux_2_35_aarch64 -w dist/
           - os: macos-latest
             arch: arm64
-            repair: delocate-wheel -w dist/ -v dist/*.whl
           - os: macos-15-intel
             arch: x86_64
-            repair: delocate-wheel -w dist/ -v dist/*.whl
           - os: windows-latest
             arch: AMD64
-            repair: delvewheel repair --add-path %CONDA_PREFIX%\\Library\\bin -w dist/ dist\\*.whl
-        python: ["3.11", "3.12", "3.13", "3.14"]
     runs-on: ${{ matrix.os }}
     defaults:
       run:
@@ -73,11 +70,28 @@ jobs:
       - name: Build wheel
         run: pip wheel . --no-build-isolation --wheel-dir raw-dist/
 
-      - name: Repair wheel
+      # Repair bundles shared libs (libpinocchio, libboost, etc.) into the wheel
+      # so users can pip install without needing conda/pinocchio on their system.
+      # Each platform has its own repair tool and shell requirements.
+
+      - name: Repair wheel (Linux)
+        if: runner.os == 'Linux'
         run: |
           mkdir -p dist
-          ${{ matrix.repair }}
-        shell: bash -l {0}
+          auditwheel repair --plat manylinux_2_35_${{ matrix.arch }} -w dist/ raw-dist/*.whl
+
+      - name: Repair wheel (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          mkdir -p dist
+          delocate-wheel -w dist/ -v raw-dist/*.whl
+
+      - name: Repair wheel (Windows)
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: |
+          mkdir dist
+          for %%f in (raw-dist\*.whl) do delvewheel repair --add-path %CONDA_PREFIX%\Library\bin -w dist\ "%%f"
 
       - name: Test wheel
         run: |
