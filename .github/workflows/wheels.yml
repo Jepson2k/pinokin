@@ -78,13 +78,13 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           mkdir -p dist
-          auditwheel repair -w dist/ raw-dist/*.whl
+          LD_LIBRARY_PATH="$CONDA_PREFIX/lib" auditwheel repair -w dist/ raw-dist/*.whl
 
       - name: Repair wheel (macOS)
         if: runner.os == 'macOS'
         run: |
           mkdir -p dist
-          delocate-wheel -w dist/ -v raw-dist/*.whl
+          DYLD_LIBRARY_PATH="$CONDA_PREFIX/lib" delocate-wheel -w dist/ -v raw-dist/*.whl
 
       - name: Repair wheel (Windows)
         if: runner.os == 'Windows'
