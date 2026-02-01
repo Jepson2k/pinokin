@@ -16,6 +16,7 @@ public:
                                   const std::string& ee_frame = "");
 
     Eigen::Matrix4d fkine(const Eigen::VectorXd& q) const;
+    void fkine_into(const Eigen::VectorXd& q, Eigen::Ref<Eigen::Matrix4d> out) const;
 
     // World-frame Jacobian with [linear; angular] row ordering
     void jacob0(const Eigen::VectorXd& q, Eigen::Ref<Eigen::MatrixXd> J) const;
@@ -34,6 +35,8 @@ public:
     void set_tool_transform(const Eigen::Matrix4d& T_tool);
     void clear_tool_transform();
     bool has_tool_transform() const { return has_tool_; }
+    const Eigen::Matrix4d& tool_transform() const { return T_tool_; }
+    const Eigen::Vector3d& tool_offset() const { return tool_offset_; }
 
     const pinocchio::Model& model() const { return model_; }
     pinocchio::Data& data() const { return data_; }

@@ -66,6 +66,14 @@ Eigen::Matrix4d Robot::fkine(const Eigen::VectorXd& q) const {
     return T;
 }
 
+void Robot::fkine_into(const Eigen::VectorXd& q, Eigen::Ref<Eigen::Matrix4d> out) const {
+    pinocchio::framesForwardKinematics(model_, data_, q);
+    out = data_.oMf[ee_frame_id_].toHomogeneousMatrix();
+    if (has_tool_) {
+        out = out * T_tool_;
+    }
+}
+
 void Robot::jacob0(const Eigen::VectorXd& q, Eigen::Ref<Eigen::MatrixXd> J) const {
     J.setZero();
     // LOCAL_WORLD_ALIGNED: world-frame orientation, referenced at the frame origin.

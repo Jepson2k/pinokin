@@ -51,15 +51,14 @@ private:
     int max_iter_;
     int max_restarts_;
     bool enforce_limits_;
+    bool we_is_identity_;  // fast path when We_ == I
     Eigen::Matrix<double, 6, 6> We_;
 
-    // Pre-allocated workspace
-    Eigen::MatrixXd J_;      // 6 x nq
-    Eigen::VectorXd e_;      // 6
+    // Pre-allocated workspace (fixed-size for 6-DOF fast path)
+    Eigen::Matrix<double, 6, Eigen::Dynamic> J_;   // 6 x nq
+    Eigen::Matrix<double, 6, 1> e_;                 // 6
     Eigen::MatrixXd JtWJ_;   // nq x nq
     Eigen::VectorXd g_;      // nq
-    Eigen::MatrixXd Wn_;     // nq x nq
-    Eigen::MatrixXd EyeN_;   // nq x nq identity
     Eigen::Matrix4d Te_;     // current FK
 
     // Results
@@ -81,10 +80,16 @@ private:
     bool check_limits() const;
     void rand_q();
 
+    // Fused FK + Jacobian: single forwardKinematics pass, one frame update
+    void compute_fk_and_jacob0();
+
     // Ported from RTB methods.cpp:673-718
     static void angle_axis(const Eigen::Matrix4d& Te,
                            const Eigen::Matrix4d& Tep,
-                           Eigen::VectorXd& e);
+                           Eigen::Matrix<double, 6, 1>& e);
+
+    // Cached skew matrix for tool correction (avoids per-iter allocation)
+    Eigen::Matrix3d skew_r_;
 };
 
 } // namespace pinokin

@@ -19,11 +19,16 @@ NB_MODULE(_core, m) {
         .def_static("from_urdf_string", &Robot::from_urdf_string,
                      nb::arg("urdf_string"), nb::arg("ee_frame") = "")
         .def("fkine", &Robot::fkine, nb::arg("q"))
+        .def("fkine_into", &Robot::fkine_into, nb::arg("q"), nb::arg("out"))
         .def("jacob0", [](const Robot& r, const Eigen::VectorXd& q) {
             Eigen::MatrixXd J(6, r.nq());
             r.jacob0(q, J);
             return J;
         }, nb::arg("q"))
+        .def("jacob0_into", [](const Robot& r, const Eigen::VectorXd& q,
+                               Eigen::Ref<Eigen::MatrixXd> out) {
+            r.jacob0(q, out);
+        }, nb::arg("q"), nb::arg("out"))
         .def("jacobe", [](const Robot& r, const Eigen::VectorXd& q) {
             Eigen::MatrixXd J(6, r.nq());
             r.jacobe(q, J);
@@ -35,6 +40,12 @@ NB_MODULE(_core, m) {
                      nb::rv_policy::reference_internal)
         .def_prop_ro("upper_limits", &Robot::upper_limits,
                      nb::rv_policy::reference_internal)
+        .def_prop_ro("qlim", [](const Robot& r) {
+            Eigen::MatrixXd qlim(2, r.nq());
+            qlim.row(0) = r.lower_limits();
+            qlim.row(1) = r.upper_limits();
+            return qlim;
+        })
         .def("set_ee_frame", &Robot::set_ee_frame, nb::arg("name"))
         .def("set_tool_transform", &Robot::set_tool_transform, nb::arg("T_tool"))
         .def("clear_tool_transform", &Robot::clear_tool_transform)

@@ -2,6 +2,10 @@
 #include <cmath>
 #include <limits>
 
+#include <pinocchio/algorithm/kinematics.hpp>
+#include <pinocchio/algorithm/jacobian.hpp>
+#include <pinocchio/algorithm/frames.hpp>
+
 namespace pinokin {
 
 static constexpr double PI = 3.14159265358979323846264338327950288;
@@ -21,16 +25,15 @@ IKSolver::IKSolver(const Robot& robot, Method method, Damping damping,
     , max_iter_(max_iter)
     , max_restarts_(max_restarts)
     , enforce_limits_(enforce_limits)
+    , we_is_identity_(true)
     , rng_(std::random_device{}())
 {
     int n = robot_.nq();
     We_ = Eigen::Matrix<double, 6, 6>::Identity();
     J_.resize(6, n);
-    e_.resize(6);
+    e_.setZero();
     JtWJ_.resize(n, n);
     g_.resize(n);
-    Wn_.resize(n, n);
-    EyeN_ = Eigen::MatrixXd::Identity(n, n);
     Te_ = Eigen::Matrix4d::Identity();
     q_.resize(n);
     q_.setZero();
@@ -45,6 +48,8 @@ void IKSolver::set_we(const Eigen::VectorXd& we) {
         throw std::runtime_error("we must be a 6-vector");
     }
     We_ = we.asDiagonal();
+    // Check if we is all ones (identity)
+    we_is_identity_ = we.isApprox(Eigen::VectorXd::Ones(6));
 }
 
 bool IKSolver::solve(const Eigen::Matrix4d& Tep, const Eigen::VectorXd* q0) {
@@ -75,10 +80,14 @@ void IKSolver::solve_gn(const Eigen::Matrix4d& Tep) {
     while (search <= max_restarts_) {
         int iter = 1;
         while (iter <= max_iter_) {
-            Te_ = robot_.fkine(q_);
+            compute_fk_and_jacob0();
             angle_axis(Te_, Tep, e_);
 
-            residual_ = 0.5 * (e_.transpose() * We_ * e_)(0, 0);
+            if (we_is_identity_) {
+                residual_ = 0.5 * e_.squaredNorm();
+            } else {
+                residual_ = 0.5 * (e_.transpose() * We_ * e_)(0, 0);
+            }
 
             if (residual_ < tol_) {
                 smart_wrapping();
@@ -91,10 +100,13 @@ void IKSolver::solve_gn(const Eigen::Matrix4d& Tep) {
                 break;
             }
 
-            robot_.jacob0(q_, J_);
-
-            g_ = J_.transpose() * We_ * e_;
-            JtWJ_ = J_.transpose() * We_ * J_;
+            if (we_is_identity_) {
+                g_.noalias() = J_.transpose() * e_;
+                JtWJ_.noalias() = J_.transpose() * J_;
+            } else {
+                g_.noalias() = J_.transpose() * (We_ * e_);
+                JtWJ_.noalias() = J_.transpose() * We_ * J_;
+            }
 
             q_ += JtWJ_.colPivHouseholderQr().solve(g_);
 
@@ -119,10 +131,14 @@ void IKSolver::solve_nr(const Eigen::Matrix4d& Tep) {
     while (search <= max_restarts_) {
         int iter = 1;
         while (iter <= max_iter_) {
-            Te_ = robot_.fkine(q_);
+            compute_fk_and_jacob0();
             angle_axis(Te_, Tep, e_);
 
-            residual_ = 0.5 * (e_.transpose() * We_ * e_)(0, 0);
+            if (we_is_identity_) {
+                residual_ = 0.5 * e_.squaredNorm();
+            } else {
+                residual_ = 0.5 * (e_.transpose() * We_ * e_)(0, 0);
+            }
 
             if (residual_ < tol_) {
                 smart_wrapping();
@@ -135,15 +151,13 @@ void IKSolver::solve_nr(const Eigen::Matrix4d& Tep) {
                 break;
             }
 
-            robot_.jacob0(q_, J_);
-
             // For non-square Jacobians, use pseudo-inverse via SVD
             if (robot_.nq() != 6) {
                 Eigen::JacobiSVD<Eigen::MatrixXd> svd(
                     J_, Eigen::ComputeThinU | Eigen::ComputeThinV);
                 q_ += svd.solve(e_);
             } else {
-                // Square case: direct inverse
+                // Square case: direct solve
                 q_ += J_.colPivHouseholderQr().solve(e_);
             }
 
@@ -168,10 +182,14 @@ void IKSolver::solve_lm(const Eigen::Matrix4d& Tep) {
     while (search <= max_restarts_) {
         int iter = 1;
         while (iter <= max_iter_) {
-            Te_ = robot_.fkine(q_);
+            compute_fk_and_jacob0();
             angle_axis(Te_, Tep, e_);
 
-            residual_ = 0.5 * (e_.transpose() * We_ * e_)(0, 0);
+            if (we_is_identity_) {
+                residual_ = 0.5 * e_.squaredNorm();
+            } else {
+                residual_ = 0.5 * (e_.transpose() * We_ * e_)(0, 0);
+            }
 
             if (residual_ < tol_) {
                 smart_wrapping();
@@ -184,26 +202,32 @@ void IKSolver::solve_lm(const Eigen::Matrix4d& Tep) {
                 break;
             }
 
-            robot_.jacob0(q_, J_);
-
-            // Compute damping matrix Wn based on method
+            // Compute damping scalar
+            double wn;
             switch (damping_) {
                 case Damping::Chan:
-                    // Wn = lambda * E * I
-                    Wn_ = lambda_ * residual_ * EyeN_;
+                    wn = lambda_ * residual_;
                     break;
                 case Damping::Wampler:
-                    // Wn = lambda * I (constant)
-                    Wn_ = lambda_ * EyeN_;
+                    wn = lambda_;
                     break;
                 case Damping::Sugihara:
-                    // Wn = E * I + lambda * I
-                    Wn_ = (residual_ + lambda_) * EyeN_;
+                    wn = residual_ + lambda_;
                     break;
             }
 
-            g_ = J_.transpose() * We_ * e_;
-            q_ += (J_.transpose() * We_ * J_ + Wn_).colPivHouseholderQr().solve(g_);
+            // Build J^T * We * J + wn * I and gradient
+            if (we_is_identity_) {
+                g_.noalias() = J_.transpose() * e_;
+                JtWJ_.noalias() = J_.transpose() * J_;
+            } else {
+                g_.noalias() = J_.transpose() * (We_ * e_);
+                JtWJ_.noalias() = J_.transpose() * We_ * J_;
+            }
+            // Add damping to diagonal (avoids allocating Wn_ matrix)
+            JtWJ_.diagonal().array() += wn;
+
+            q_ += JtWJ_.colPivHouseholderQr().solve(g_);
 
             iter += 1;
         }
@@ -274,11 +298,42 @@ void IKSolver::rand_q() {
     }
 }
 
+// ===== Fused FK + Jacobian (single Pinocchio pass) =====
+void IKSolver::compute_fk_and_jacob0() {
+    const auto& model = robot_.model();
+    auto& data = robot_.data();
+    auto frame_id = robot_.ee_frame_id();
+
+    // One pass: forwardKinematics + computeJointJacobians
+    pinocchio::computeJointJacobians(model, data, q_);
+    pinocchio::updateFramePlacement(model, data, frame_id);
+
+    // Extract FK
+    Te_ = data.oMf[frame_id].toHomogeneousMatrix();
+
+    // Extract Jacobian (no recomputation — uses already-computed data)
+    J_.setZero();
+    pinocchio::getFrameJacobian(model, data, frame_id,
+                                pinocchio::LOCAL_WORLD_ALIGNED, J_);
+
+    // Tool correction (if active)
+    if (robot_.has_tool_transform()) {
+        // FK: post-multiply tool transform
+        Te_ = Te_ * robot_.tool_transform();
+        // Jacobian: v_tool = v_ee + omega x (R_ee * p_tool)
+        Eigen::Vector3d r = data.oMf[frame_id].rotation() * robot_.tool_offset();
+        skew_r_ <<     0, -r(2),  r(1),
+                    r(2),     0, -r(0),
+                   -r(1),  r(0),     0;
+        J_.topRows(3) -= skew_r_ * J_.bottomRows(3);
+    }
+}
+
 // ===== angle_axis error function =====
 // Ported verbatim from RTB methods.cpp:673-718
 void IKSolver::angle_axis(const Eigen::Matrix4d& Te,
                           const Eigen::Matrix4d& Tep,
-                          Eigen::VectorXd& e) {
+                          Eigen::Matrix<double, 6, 1>& e) {
     // e[:3] = Tep[:3, 3] - Te[:3, 3]
     e.head<3>() = Tep.block<3, 1>(0, 3) - Te.block<3, 1>(0, 3);
 
