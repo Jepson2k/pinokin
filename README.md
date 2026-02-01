@@ -1,6 +1,8 @@
 # pinokin
 
-FK, Jacobians, and IK for URDF robots — Pinocchio C++ backend with nanobind Python bindings.
+The core IK math from [robotics-toolbox-python](https://github.com/petercorke/robotics-toolbox-python) combined with [Pinocchio](https://github.com/stack-of-tasks/pinocchio) FK, Jacobian, and SO3/SE3 math. C++ backend with [nanobind](https://github.com/wjakob/nanobind) Python bindings.
+
+Maintains execution speed and zero allocation with lower import time (~ms vs ~1s for RTB) and a reduced dependency set.
 
 ## Install
 
@@ -9,6 +11,16 @@ pip install pinokin
 ```
 
 Pre-built wheels are available on [GitHub Releases](https://github.com/Jepson2k/pinokin/releases).
+
+## Platforms
+
+Wheels are built for Python 3.11-3.14:
+
+| | x86_64 | ARM64 |
+|---|---|---|
+| Linux | manylinux_2_35 | manylinux_2_35 |
+| macOS | Intel | Apple Silicon |
+| Windows | AMD64 | — |
 
 ## Usage
 
@@ -25,10 +37,23 @@ T = robot.fkine(q)  # 4x4 homogeneous transform
 # World-frame Jacobian
 J = robot.jacob0(q)  # 6 x nq, [linear; angular]
 
+# Joint limits (2 x nq)
+qlim = robot.qlim  # row 0: lower, row 1: upper
+
 # Inverse kinematics
 solver = IKSolver(robot)
 solver.solve(T, q0=q)
 print(solver.q, solver.success)
+```
+
+### Zero-allocation variants for hot loops
+
+```python
+T_buf = np.empty((4, 4))
+J_buf = np.empty((6, robot.nq))
+
+robot.fkine_into(q, T_buf)
+robot.jacob0_into(q, J_buf)
 ```
 
 ## Build from source
@@ -44,6 +69,6 @@ pytest tests/ -v
 
 ## Acknowledgments
 
-- **IK algorithms** (Gauss-Newton, Newton-Raphson, Levenberg-Marquardt with Chan/Wampler/Sugihara damping, angle_axis error, smart wrapping) ported from [robotics-toolbox-python](https://github.com/petercorke/robotics-toolbox-python) by Peter Corke et al., MIT license.
+- **IK algorithms** (Gauss-Newton, Newton-Raphson, Levenberg-Marquardt with Chan/Wampler/Sugihara damping, angle_axis error) ported from [robotics-toolbox-python](https://github.com/petercorke/robotics-toolbox-python) by Peter Corke et al., MIT license.
 - **FK, Jacobians, and URDF parsing** powered by [Pinocchio](https://github.com/stack-of-tasks/pinocchio), BSD-2 license.
 - **Python bindings** via [nanobind](https://github.com/wjakob/nanobind) by Wenzel Jakob, BSD-3 license.

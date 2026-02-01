@@ -90,7 +90,7 @@ void IKSolver::solve_gn(const Eigen::Matrix4d& Tep) {
             }
 
             if (residual_ < tol_) {
-                smart_wrapping();
+                wrap_to_limits();
                 if (enforce_limits_) {
                     success_ = check_limits();
                 } else {
@@ -141,7 +141,7 @@ void IKSolver::solve_nr(const Eigen::Matrix4d& Tep) {
             }
 
             if (residual_ < tol_) {
-                smart_wrapping();
+                wrap_to_limits();
                 if (enforce_limits_) {
                     success_ = check_limits();
                 } else {
@@ -192,7 +192,7 @@ void IKSolver::solve_lm(const Eigen::Matrix4d& Tep) {
             }
 
             if (residual_ < tol_) {
-                smart_wrapping();
+                wrap_to_limits();
                 if (enforce_limits_) {
                     success_ = check_limits();
                 } else {
@@ -243,9 +243,8 @@ void IKSolver::solve_lm(const Eigen::Matrix4d& Tep) {
     }
 }
 
-// ===== Smart wrapping: only wrap if it brings q within limits =====
-// Ported from ik.cpp smartWrapping
-void IKSolver::smart_wrapping() {
+// ===== Wrap solution angles to stay within joint limits =====
+void IKSolver::wrap_to_limits() {
     const auto& ql = robot_.lower_limits();
     const auto& qh = robot_.upper_limits();
 

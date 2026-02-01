@@ -76,7 +76,7 @@ private:
     void solve_nr(const Eigen::Matrix4d& Tep);
     void solve_lm(const Eigen::Matrix4d& Tep);
 
-    void smart_wrapping();
+    void wrap_to_limits();
     bool check_limits() const;
     void rand_q();
 

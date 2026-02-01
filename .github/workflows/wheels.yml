@@ -4,6 +4,9 @@ on:
     types: [created]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     strategy:
@@ -39,6 +42,20 @@ jobs:
           channels: conda-forge
           python-version: ${{ matrix.python }}
 
+      - name: Sync version to release tag
+        if: github.event_name == 'release'
+        shell: python
+        run: |
+          import re
+          tag = "${{ github.event.release.tag_name }}"
+          version = tag.lstrip("v")
+          print(f"Setting version to {version} (from tag {tag})")
+          with open("pyproject.toml", "r") as f:
+              content = f.read()
+          content = re.sub(r'^version = ".*"', f'version = "{version}"', content, flags=re.MULTILINE)
+          with open("pyproject.toml", "w") as f:
+              f.write(content)
+
       - name: Install build dependencies
         run: |
           conda install -y pinocchio eigen nanobind "numpy>=2.0" cmake scikit-build-core
@@ -73,6 +90,41 @@ jobs:
           name: wheel-${{ matrix.os }}-${{ matrix.arch }}-py${{ matrix.python }}
           path: dist/*.whl
 
+  sdist:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Sync version to release tag
+        if: github.event_name == 'release'
+        run: |
+          TAG="${{ github.event.release.tag_name }}"
+          VERSION="${TAG#v}"
+          echo "Setting version to $VERSION (from tag $TAG)"
+          sed -i "s/^version = \".*\"/version = \"$VERSION\"/" pyproject.toml
+
+      - name: Build sdist
+        run: |
+          python -m pip install -U build
+          python -m build --sdist
+
+      - uses: actions/upload-artifact@v4
+        if: github.event_name == 'workflow_dispatch'
+        with:
+          name: sdist
+          path: dist/*.tar.gz
+
+      - uses: softprops/action-gh-release@v2
+        if: github.event_name == 'release'
+        with:
+          files: dist/*.tar.gz
+
   upload-release:
     needs: build
     if: github.event_name == 'release'
@@ -87,3 +139,32 @@ jobs:
       - uses: softprops/action-gh-release@v2
         with:
           files: dist/*.whl
+
+  update-version:
+    name: Update version in codebase
+    runs-on: ubuntu-latest
+    if: github.event_name == 'release'
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update version and commit
+        run: |
+          TAG="${{ github.event.release.tag_name }}"
+          VERSION="${TAG#v}"
+          CURRENT=$(grep -E '^version = "' pyproject.toml | sed -E 's/.*"(.*)".*/\1/')
+          if [[ "$CURRENT" == "$VERSION" ]]; then
+            echo "Version already matches ($VERSION), skipping"
+            exit 0
+          fi
+          echo "Updating version from $CURRENT to $VERSION"
+          sed -i "s/^version = \".*\"/version = \"$VERSION\"/" pyproject.toml
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add pyproject.toml
+          git commit -m "Bump version from $CURRENT to $VERSION"
+          git push
