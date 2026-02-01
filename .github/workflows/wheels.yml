@@ -68,7 +68,7 @@ jobs:
           fi
 
       - name: Build wheel
-        run: pip wheel . --no-build-isolation --wheel-dir raw-dist/
+        run: pip wheel . --no-build-isolation --no-deps --wheel-dir raw-dist/
 
       # Repair bundles shared libs (libpinocchio, libboost, etc.) into the wheel
       # so users can pip install without needing conda/pinocchio on their system.
@@ -78,7 +78,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           mkdir -p dist
-          auditwheel repair --plat manylinux_2_35_${{ matrix.arch }} -w dist/ raw-dist/*.whl
+          auditwheel repair -w dist/ raw-dist/*.whl
 
       - name: Repair wheel (macOS)
         if: runner.os == 'macOS'
