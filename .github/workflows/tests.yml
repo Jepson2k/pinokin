@@ -12,5 +12,6 @@ jobs:
         with:
           environment-file: environment.yml
           miniforge-version: latest
+          conda-remove-defaults: true
       - run: pip install -e ".[dev]" --no-build-isolation
       - run: pytest tests/ -v

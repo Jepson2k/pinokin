@@ -36,6 +36,7 @@ jobs:
           environment-file: environment.yml
           miniforge-version: latest
           python-version: ${{ matrix.python }}
+          conda-remove-defaults: true
 
       - name: Sync version to release tag
         if: github.event_name == 'release'
