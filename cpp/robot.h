@@ -27,6 +27,7 @@ public:
     // Batch FK: N joint configs -> N 4x4 matrices (loop in C++)
     std::vector<Eigen::Matrix4d> batch_fk(const Eigen::MatrixXd& joint_positions) const;
 
+    const std::string& name() const { return model_.name; }
     int nq() const { return static_cast<int>(model_.nq); }
     const Eigen::VectorXd& lower_limits() const { return model_.lowerPositionLimit; }
     const Eigen::VectorXd& upper_limits() const { return model_.upperPositionLimit; }

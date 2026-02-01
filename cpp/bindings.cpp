@@ -35,6 +35,7 @@ NB_MODULE(_core, m) {
             return J;
         }, nb::arg("q"))
         .def("batch_fk", &Robot::batch_fk, nb::arg("joint_positions"))
+        .def_prop_ro("name", &Robot::name)
         .def_prop_ro("nq", &Robot::nq)
         .def_prop_ro("lower_limits", &Robot::lower_limits,
                      nb::rv_policy::reference_internal)
