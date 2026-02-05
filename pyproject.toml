@@ -4,7 +4,7 @@ build-backend = "scikit_build_core.build"
 
 [project]
 name = "pinokin"
-version = "0.1.1"
+version = "0.1.2"
 description = "FK, Jacobians, and IK for URDF robots — Pinocchio C++ backend with nanobind Python bindings"
 license = "MIT"
 readme = "README.md"
