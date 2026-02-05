@@ -1,7 +1,6 @@
 import numpy as np
-import pytest
 
-from pinokin import Robot, IKSolver
+from pinokin import IKSolver
 
 
 def test_batch_fk_matches_individual(robot):
@@ -46,8 +45,7 @@ def test_batch_ik_round_trip(robot):
     for i in range(N):
         if result.valid[i]:
             T_check = robot.fkine(result.joint_positions[i])
-            np.testing.assert_allclose(
-                T_check[:3, 3], poses[i][:3, 3], atol=1e-3)
+            np.testing.assert_allclose(T_check[:3, 3], poses[i][:3, 3], atol=1e-3)
 
 
 def test_batch_ik_warm_start_chain(robot):

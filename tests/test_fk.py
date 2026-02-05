@@ -1,7 +1,4 @@
 import numpy as np
-import pytest
-
-from pinokin import Robot
 
 
 def test_fk_zero_config(robot):

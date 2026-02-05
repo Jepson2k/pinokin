@@ -57,6 +57,27 @@ pip install -e ".[dev]" --no-build-isolation
 pytest tests/ -v
 ```
 
+### Building a standalone wheel
+
+To build a wheel that bundles all dependencies (works without conda):
+
+```bash
+conda activate pinokin
+
+# Build raw wheel
+pip wheel . --no-build-isolation --no-deps --wheel-dir raw-dist/
+
+# Repair wheel to bundle shared libs (Linux)
+pip install auditwheel patchelf
+mkdir -p dist
+LD_LIBRARY_PATH="$CONDA_PREFIX/lib" auditwheel repair -w dist/ --plat manylinux_2_41_aarch64 raw-dist/*.whl
+
+# Install in another environment
+pip install dist/pinokin-*.whl --force-reinstall
+```
+
+See `CLAUDE.md` for macOS/Windows commands.
+
 ## Acknowledgments
 
 - **IK algorithms** (Gauss-Newton, Newton-Raphson, Levenberg-Marquardt with Chan/Wampler/Sugihara damping, angle_axis error) ported from [robotics-toolbox-python](https://github.com/petercorke/robotics-toolbox-python) by Peter Corke et al., MIT license.

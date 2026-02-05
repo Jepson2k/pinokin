@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from pinokin import Robot, IKSolver, Method, Damping
+from pinokin import Damping, IKSolver, Method
 
 
 def _round_trip(robot, solver, q_target):
@@ -24,13 +24,16 @@ class TestIKMethods:
         qu = robot.upper_limits
         return (ql + qu) / 2
 
-    @pytest.mark.parametrize("method,damping", [
-        (Method.GN, Damping.Sugihara),
-        (Method.NR, Damping.Sugihara),
-        (Method.LM, Damping.Chan),
-        (Method.LM, Damping.Wampler),
-        (Method.LM, Damping.Sugihara),
-    ])
+    @pytest.mark.parametrize(
+        "method,damping",
+        [
+            (Method.GN, Damping.Sugihara),
+            (Method.NR, Damping.Sugihara),
+            (Method.LM, Damping.Chan),
+            (Method.LM, Damping.Wampler),
+            (Method.LM, Damping.Sugihara),
+        ],
+    )
     def test_round_trip(self, robot, q_mid, method, damping):
         solver = IKSolver(robot, method=method, damping=damping)
         _round_trip(robot, solver, q_mid)

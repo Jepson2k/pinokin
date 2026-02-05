@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from pinokin import Robot, IKSolver
+from pinokin import IKSolver, Robot
 
 URDF_PATH = str(Path(__file__).parent / "parol6.urdf")
 
