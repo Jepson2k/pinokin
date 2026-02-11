@@ -14,6 +14,7 @@ from pinokin.numba_se3 import (
     # Basic SE3 operations
     se3_identity,
     # SE3 interpolation and distance
+    batch_se3_interp,
     se3_interp,
     se3_interp_ws,
     se3_inverse,
@@ -59,6 +60,7 @@ __all__ = [
     "so3_exp",
     "se3_log",
     "se3_exp",
+    "batch_se3_interp",
     "se3_interp",
     "se3_angdist",
     "se3_log_ws",

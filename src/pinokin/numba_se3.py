@@ -789,6 +789,41 @@ def se3_interp_ws(
     se3_mul(T1, delta_scaled_ws, out)
 
 
+@njit(cache=True)
+def batch_se3_interp(
+    T1: np.ndarray,
+    T2: np.ndarray,
+    s_values: np.ndarray,
+    out: np.ndarray,
+) -> None:
+    """Interpolate between two SE3 transforms at multiple parameter values.
+
+    Computes the twist log(T1^-1 * T2) once, then evaluates
+    T1 * exp(s * twist) for each s in s_values.
+
+    Args:
+        T1: 4x4 start SE3 matrix
+        T2: 4x4 end SE3 matrix
+        s_values: 1D array of interpolation parameters
+        out: (N, 4, 4) output array of SE3 matrices
+    """
+    T1_inv = np.zeros((4, 4), dtype=np.float64)
+    se3_inverse(T1, T1_inv)
+    delta = np.zeros((4, 4), dtype=np.float64)
+    se3_mul(T1_inv, T2, delta)
+    twist = np.zeros(6, dtype=np.float64)
+    se3_log(delta, twist)
+
+    scaled = np.zeros(6, dtype=np.float64)
+    exp_buf = np.zeros((4, 4), dtype=np.float64)
+    for i in range(len(s_values)):
+        s = s_values[i]
+        for k in range(6):
+            scaled[k] = twist[k] * s
+        se3_exp(scaled, exp_buf)
+        se3_mul(T1, exp_buf, out[i])
+
+
 def warmup_numba_se3() -> None:
     """Pre-compile all numba functions with dummy data.
 
@@ -834,6 +869,11 @@ def warmup_numba_se3() -> None:
     # SE3 interpolation and angular distance
     se3_interp(dummy_4x4, dummy_4x4_b, 0.5, dummy_4x4_out)
     se3_angdist(dummy_4x4, dummy_4x4_b)
+    batch_se3_interp(
+        dummy_4x4, dummy_4x4_b,
+        np.array([0.0, 0.5, 1.0], dtype=np.float64),
+        np.zeros((3, 4, 4), dtype=np.float64),
+    )
 
     # Workspace variants
     omega_ws = np.zeros(3, dtype=np.float64)
