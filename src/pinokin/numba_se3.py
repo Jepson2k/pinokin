@@ -870,7 +870,8 @@ def warmup_numba_se3() -> None:
     se3_interp(dummy_4x4, dummy_4x4_b, 0.5, dummy_4x4_out)
     se3_angdist(dummy_4x4, dummy_4x4_b)
     batch_se3_interp(
-        dummy_4x4, dummy_4x4_b,
+        dummy_4x4,
+        dummy_4x4_b,
         np.array([0.0, 0.5, 1.0], dtype=np.float64),
         np.zeros((3, 4, 4), dtype=np.float64),
     )

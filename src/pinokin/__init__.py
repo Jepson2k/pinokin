@@ -5,6 +5,8 @@ from pinokin.numba_se3 import (
     _compute_V_matrix,
     # Comparison
     arrays_equal_6,
+    # SE3 interpolation and distance
+    batch_se3_interp,
     se3_angdist,
     se3_copy,
     se3_exp,
@@ -13,8 +15,6 @@ from pinokin.numba_se3 import (
     se3_from_trans,
     # Basic SE3 operations
     se3_identity,
-    # SE3 interpolation and distance
-    batch_se3_interp,
     se3_interp,
     se3_interp_ws,
     se3_inverse,
