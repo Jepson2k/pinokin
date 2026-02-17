@@ -28,7 +28,8 @@ public:
     };
 
     BatchResult batch_ik(const std::vector<Eigen::Matrix4d>& poses,
-                         const Eigen::VectorXd& q_start);
+                         const Eigen::VectorXd& q_start,
+                         bool stop_on_failure = false);
 
     // Results (valid after solve())
     const Eigen::VectorXd& q() const { return q_; }

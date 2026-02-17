@@ -381,7 +381,8 @@ void IKSolver::angle_axis(const Eigen::Matrix4d& Te,
 // ===== Batch IK =====
 IKSolver::BatchResult IKSolver::batch_ik(
     const std::vector<Eigen::Matrix4d>& poses,
-    const Eigen::VectorXd& q_start) {
+    const Eigen::VectorXd& q_start,
+    bool stop_on_failure) {
 
     const int n_poses = static_cast<int>(poses.size());
     const int n = robot_.nq();
@@ -403,6 +404,14 @@ IKSolver::BatchResult IKSolver::batch_ik(
         } else {
             result.joint_positions.row(i).setZero();
             result.all_valid = false;
+            if (stop_on_failure) {
+                // Zero + invalidate remaining rows and break
+                for (int j = i + 1; j < n_poses; ++j) {
+                    result.joint_positions.row(j).setZero();
+                    // valid[j] already false from resize
+                }
+                break;
+            }
             // Keep q_warm from last successful solve
         }
     }

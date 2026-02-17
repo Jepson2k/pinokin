@@ -92,7 +92,8 @@ NB_MODULE(_core, m) {
              },
              nb::arg("Tep"), nb::arg("q0") = nb::none())
         .def("batch_ik", &IKSolver::batch_ik,
-             nb::arg("poses"), nb::arg("q_start"))
+             nb::arg("poses"), nb::arg("q_start"),
+             nb::arg("stop_on_failure") = false)
         .def("set_we", &IKSolver::set_we, nb::arg("we"))
         .def_prop_ro("q", &IKSolver::q,
                      nb::rv_policy::reference_internal)

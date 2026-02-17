@@ -69,6 +69,7 @@ class IKSolver:
         self,
         poses: list[NDArray[np.float64]],
         q_start: NDArray[np.float64],
+        stop_on_failure: bool = False,
     ) -> BatchResult: ...
     def set_we(self, we: NDArray[np.float64]) -> None: ...
     @property
