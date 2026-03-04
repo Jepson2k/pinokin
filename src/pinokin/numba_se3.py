@@ -42,6 +42,26 @@ def arrays_equal_6(a: np.ndarray, b: np.ndarray) -> bool:
 
 
 @njit(cache=True)
+def arrays_equal_n(a: np.ndarray, b: np.ndarray) -> bool:
+    """Fast N-element array comparison.
+
+    Avoids np.array_equal dispatch overhead for small arrays.
+    Both arrays must have the same length.
+
+    Args:
+        a: First array
+        b: Second array (same length as a)
+
+    Returns:
+        True if all elements are equal
+    """
+    for i in range(len(a)):
+        if a[i] != b[i]:
+            return False
+    return True
+
+
+@njit(cache=True)
 def so3_from_rpy(roll: float, pitch: float, yaw: float, out: np.ndarray) -> None:
     """Create 3x3 rotation matrix from XYZ euler angles (intrinsic).
 

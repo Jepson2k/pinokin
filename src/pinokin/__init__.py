@@ -5,6 +5,7 @@ from pinokin.numba_se3 import (
     _compute_V_matrix,
     # Comparison
     arrays_equal_6,
+    arrays_equal_n,
     # SE3 interpolation and distance
     batch_se3_interp,
     se3_angdist,
@@ -44,6 +45,7 @@ __all__ = [
     "BatchResult",
     # Zero-allocation SE3/SO3 utilities
     "arrays_equal_6",
+    "arrays_equal_n",
     "so3_from_rpy",
     "so3_rpy",
     "se3_from_rpy",
