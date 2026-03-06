@@ -19,7 +19,7 @@ pytest tests/ -v
 ```bash
 ruff check src/pinokin/
 ruff format src/pinokin/
-mypy src/pinokin/
+ty check src/pinokin/
 
 # Run all pre-commit hooks
 pre-commit run --all-files
