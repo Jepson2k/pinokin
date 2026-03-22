@@ -80,6 +80,7 @@ All C++ code lives in `namespace pinokin`.
 
 - FK returns 4x4 numpy arrays (Eigen::Matrix4d)
 - `fkine_into` / `jacob0_into` write to pre-allocated buffers (zero-allocation hot path)
+- Output buffers must be **Fortran-order** (`order="F"`) — Eigen is column-major
 - `qlim` returns 2xN array (row 0: lower, row 1: upper)
 - Jacobians are 6xN with [linear; angular] row ordering
 - jacob0 uses LOCAL_WORLD_ALIGNED (world-frame orientation)

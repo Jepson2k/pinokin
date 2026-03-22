@@ -39,8 +39,9 @@ print(solver.q, solver.success)
 ### Zero-allocation variants for hot loops
 
 ```python
-T_buf = np.empty((4, 4))
-J_buf = np.empty((6, robot.nq))
+# Eigen uses column-major (Fortran) order — output buffers must match
+T_buf = np.empty((4, 4), dtype=np.float64, order="F")
+J_buf = np.empty((6, robot.nq), dtype=np.float64, order="F")
 
 robot.fkine_into(q, T_buf)
 robot.jacob0_into(q, J_buf)
