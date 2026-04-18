@@ -118,3 +118,60 @@ def test_solver_result_properties(robot):
     assert solver.residual < 1e-6
     assert solver.iterations > 0
     assert solver.q.shape == (robot.nq,)
+
+
+class TestNullSpace:
+    """Null-space optimization (ported from RTB _null_Σ / _calc_qnull)."""
+
+    def test_disabled_matches_baseline(self, robot):
+        # kq=0, km=0 must leave the solver's update path unchanged.
+        ql = robot.lower_limits
+        qu = robot.upper_limits
+        q_target = (ql + qu) / 2
+        T = robot.fkine(q_target)
+
+        baseline = IKSolver(robot, tol=1e-10, max_iter=50, max_restarts=0)
+        baseline.solve(T, q_target)
+
+        ns = IKSolver(robot, tol=1e-10, max_iter=50, max_restarts=0,
+                      kq=0.0, km=0.0)
+        ns.solve(T, q_target)
+
+        assert baseline.success and ns.success
+        np.testing.assert_allclose(ns.q, baseline.q, atol=1e-12)
+        assert ns.iterations == baseline.iterations
+
+    def test_joint_limit_gradient_does_not_break_primary_task(self, robot):
+        # With a modest kq>0 and a seed near but not inside the influence
+        # zone, the solver must still converge to the target pose. This
+        # verifies _null_Σ doesn't corrupt the Gauss-Newton step on a
+        # full-rank 6-DOF / 6-D-task problem (where the null-space
+        # projector is theoretically zero but numerically residual).
+        ql = robot.lower_limits
+        qu = robot.upper_limits
+        q_mid = (ql + qu) / 2
+        T = robot.fkine(q_mid)
+
+        solver = IKSolver(robot, tol=1e-8, max_iter=100, max_restarts=50,
+                          kq=1.0, ps=0.0, pi=0.3)
+        ok = solver.solve(T, q_mid)
+        assert ok, f"null-space solver failed, residual={solver.residual}"
+        T_result = robot.fkine(solver.q)
+        np.testing.assert_allclose(T_result[:3, 3], T[:3, 3], atol=1e-4)
+        np.testing.assert_allclose(T_result[:3, :3], T[:3, :3], atol=1e-3)
+
+    def test_position_only_with_manipulability(self, robot):
+        # we=[1,1,1,0,0,0] reduces the task to 3-D, creating a 3-D null space
+        # on the 6-DOF arm — km>0 should still converge.
+        ql = robot.lower_limits
+        qu = robot.upper_limits
+        q_target = (ql + qu) / 2
+        T = robot.fkine(q_target)
+
+        solver = IKSolver(robot, tol=1e-6, max_iter=100, max_restarts=50,
+                          kq=0.1, km=1.0, ps=0.0, pi=0.3)
+        solver.set_we(np.array([1.0, 1.0, 1.0, 0.0, 0.0, 0.0]))
+        ok = solver.solve(T, q_target)
+        assert ok, f"null-space position-only IK failed, residual={solver.residual}"
+        T_result = robot.fkine(solver.q)
+        np.testing.assert_allclose(T_result[:3, 3], T[:3, 3], atol=1e-3)

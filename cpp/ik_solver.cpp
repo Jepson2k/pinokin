@@ -16,7 +16,8 @@ static inline double wrapToPi(double x) { return std::atan2(std::sin(x), std::co
 
 IKSolver::IKSolver(const Robot& robot, Method method, Damping damping,
                    double tol, double lambda, int max_iter, int max_restarts,
-                   bool enforce_limits)
+                   bool enforce_limits, double kq, double km, double ps,
+                   double pi)
     : robot_(robot)
     , method_(method)
     , damping_(damping)
@@ -26,6 +27,11 @@ IKSolver::IKSolver(const Robot& robot, Method method, Damping damping,
     , max_restarts_(max_restarts)
     , enforce_limits_(enforce_limits)
     , we_is_identity_(true)
+    , kq_(kq)
+    , km_(km)
+    , ps_(ps)
+    , pi_(pi)
+    , nullspace_active_(kq > 0.0 || km > 0.0)
     , rng_(std::random_device{}())
 {
     int n = robot_.nq();
@@ -43,6 +49,16 @@ IKSolver::IKSolver(const Robot& robot, Method method, Damping damping,
     residual_ = 0.0;
     iterations_ = 0;
     restarts_ = 0;
+
+    qnull_.setZero(n);
+    qnull_grad_.setZero(n);
+    sigma_.setZero(n);
+    Jm_.setZero(n);
+    N_.setZero(n, n);
+    Jpinv_.setZero(n, 6);
+    J_fd_plus_.setZero(6, n);
+    J_fd_minus_.setZero(6, n);
+    q_perturb_.setZero(n);
 }
 
 void IKSolver::set_we(const Eigen::VectorXd& we) {
@@ -113,6 +129,10 @@ void IKSolver::solve_gn(const Eigen::Matrix4d& Tep) {
             }
 
             q_ += JtWJ_.colPivHouseholderQr().solve(g_);
+            if (nullspace_active_) {
+                calc_qnull();
+                q_ += qnull_;
+            }
 
             iter += 1;
         }
@@ -163,6 +183,10 @@ void IKSolver::solve_nr(const Eigen::Matrix4d& Tep) {
             } else {
                 // Square case: direct solve
                 q_ += J_.colPivHouseholderQr().solve(e_);
+            }
+            if (nullspace_active_) {
+                calc_qnull();
+                q_ += qnull_;
             }
 
             iter += 1;
@@ -232,6 +256,10 @@ void IKSolver::solve_lm(const Eigen::Matrix4d& Tep) {
             JtWJ_.diagonal().array() += wn;
 
             q_ += JtWJ_.colPivHouseholderQr().solve(g_);
+            if (nullspace_active_) {
+                calc_qnull();
+                q_ += qnull_;
+            }
 
             iter += 1;
         }
@@ -417,6 +445,98 @@ IKSolver::BatchResult IKSolver::batch_ik(
     }
 
     return result;
+}
+
+// ===== Null-space optimization (ported from RTB IK.py _null_Σ / _calc_qnull) =====
+//
+// Σ_i = -((qi - ql_min) - pi)² / (ps - pi)²   if qi - ql_min ≤ pi
+// Σ_i = +((ql_max - qi) - pi)² / (ps - pi)²   if ql_max - qi ≤ pi
+// Σ_i = 0                                     otherwise
+//
+// RTB returns `-Σ`, producing a gradient that pushes joints away from limits.
+void IKSolver::null_sigma(Eigen::VectorXd& sigma_out) const {
+    const auto& ql = robot_.lower_limits();
+    const auto& qh = robot_.upper_limits();
+    const int n = robot_.nq();
+
+    const double denom = (ps_ - pi_);
+    const double denom_sq = denom * denom;
+
+    for (int i = 0; i < n; ++i) {
+        double s = 0.0;
+        const double lower_gap = q_(i) - ql(i);
+        const double upper_gap = qh(i) - q_(i);
+        if (lower_gap <= pi_) {
+            const double t = lower_gap - pi_;
+            s = -(t * t) / denom_sq;
+        }
+        if (upper_gap <= pi_) {
+            const double t = upper_gap - pi_;
+            s = (t * t) / denom_sq;
+        }
+        // RTB returns -Σ so the gradient points away from the violated limit
+        sigma_out(i) = -s;
+    }
+}
+
+// Manipulability gradient Jm_i = ∂m/∂q_i where m = sqrt(det(J Jᵀ)).
+// Central finite difference on jacob0 — cost is 2n Jacobian evaluations.
+// Only invoked when km_ > 0.
+void IKSolver::jacobm_fd(Eigen::VectorXd& Jm_out) {
+    const int n = robot_.nq();
+    const double h = 1e-6;
+
+    auto manip_at = [&](const Eigen::MatrixXd& J) {
+        // m = sqrt(det(J Jᵀ)); JtJ_ aliased as workspace for 6x6 JJᵀ
+        Eigen::Matrix<double, 6, 6> JJt = J * J.transpose();
+        double d = JJt.determinant();
+        return (d > 0.0) ? std::sqrt(d) : 0.0;
+    };
+
+    q_perturb_ = q_;
+    for (int i = 0; i < n; ++i) {
+        q_perturb_(i) = q_(i) + h;
+        robot_.jacob0(q_perturb_, J_fd_plus_);
+        q_perturb_(i) = q_(i) - h;
+        robot_.jacob0(q_perturb_, J_fd_minus_);
+        q_perturb_(i) = q_(i);
+
+        const double m_plus = manip_at(J_fd_plus_);
+        const double m_minus = manip_at(J_fd_minus_);
+        Jm_out(i) = (m_plus - m_minus) / (2.0 * h);
+    }
+}
+
+// Computes the null-space correction qnull_ = (I - J⁺ J) · grad,
+// where grad combines the joint-limit and manipulability gradients.
+// For a full-rank square J, (I - J⁺ J) ≈ 0 and qnull_ vanishes — that
+// is correct behavior for a 6-DOF non-redundant arm with a full 6-D task.
+void IKSolver::calc_qnull() {
+    if (!nullspace_active_) {
+        qnull_.setZero();
+        return;
+    }
+
+    qnull_grad_.setZero();
+
+    if (kq_ > 0.0) {
+        null_sigma(sigma_);
+        qnull_grad_.noalias() += (1.0 / kq_) * sigma_;
+    }
+
+    if (km_ > 0.0) {
+        jacobm_fd(Jm_);
+        qnull_grad_.noalias() += (1.0 / km_) * Jm_;
+    }
+
+    // Pseudoinverse via SVD for rank-robust null-space projector.
+    Eigen::JacobiSVD<Eigen::MatrixXd> svd(J_, Eigen::ComputeThinU | Eigen::ComputeThinV);
+    Jpinv_.noalias() = svd.solve(
+        Eigen::MatrixXd::Identity(J_.rows(), J_.rows()));
+
+    const int n = robot_.nq();
+    N_.noalias() = Eigen::MatrixXd::Identity(n, n) - Jpinv_ * J_;
+    qnull_.noalias() = N_ * qnull_grad_;
 }
 
 } // namespace pinokin

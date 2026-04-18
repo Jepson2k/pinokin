@@ -16,7 +16,9 @@ public:
              Damping damping = Damping::Sugihara,
              double tol = 1e-6, double lambda = 1.0,
              int max_iter = 30, int max_restarts = 100,
-             bool enforce_limits = true);
+             bool enforce_limits = true,
+             double kq = 0.0, double km = 0.0,
+             double ps = 0.0, double pi = 0.3);
 
     bool solve(const Eigen::Matrix4d& Tep,
                const Eigen::VectorXd* q0 = nullptr);
@@ -52,12 +54,30 @@ private:
     bool we_is_identity_;  // fast path when We_ == I
     Eigen::Matrix<double, 6, 6> We_;
 
+    // Null-space optimization parameters (ported from RTB IK.py _calc_qnull)
+    double kq_;   // joint-limit avoidance gain (0 disables)
+    double km_;   // manipulability maximization gain (0 disables)
+    double ps_;   // minimum safe distance from joint limit
+    double pi_;   // influence distance (activation threshold)
+    bool nullspace_active_;  // true iff kq_ > 0 || km_ > 0
+
     // Pre-allocated workspace (fixed-size for 6-DOF fast path)
     Eigen::Matrix<double, 6, Eigen::Dynamic> J_;   // 6 x nq
     Eigen::Matrix<double, 6, 1> e_;                 // 6
     Eigen::MatrixXd JtWJ_;   // nq x nq
     Eigen::VectorXd g_;      // nq
     Eigen::Matrix4d Te_;     // current FK
+
+    // Null-space workspace (allocated in ctor, reused across solves)
+    Eigen::VectorXd qnull_;       // nq — final null-space step
+    Eigen::VectorXd qnull_grad_;  // nq — accumulated secondary-task gradient
+    Eigen::VectorXd sigma_;       // nq — joint-limit avoidance gradient
+    Eigen::VectorXd Jm_;          // nq — manipulability gradient
+    Eigen::MatrixXd N_;           // nq x nq — null-space projector (I - J+ J)
+    Eigen::MatrixXd Jpinv_;       // nq x 6 — Jacobian pseudoinverse
+    Eigen::Matrix<double, 6, Eigen::Dynamic> J_fd_plus_;   // 6 x nq — FD scratch
+    Eigen::Matrix<double, 6, Eigen::Dynamic> J_fd_minus_;  // 6 x nq — FD scratch
+    Eigen::VectorXd q_perturb_;   // nq — FD perturbation buffer
 
     // Results
     Eigen::VectorXd q_;
@@ -81,6 +101,15 @@ private:
 
     // Fused FK + Jacobian: single forwardKinematics pass, one frame update
     void compute_fk_and_jacob0();
+
+    // Null-space helpers (no-ops when nullspace_active_ == false).
+    // null_sigma fills sigma_out with RTB's Σ gradient (writes zeros where
+    // joints are clear of limits); jacobm_fd fills Jm_out with the
+    // manipulability gradient via finite differences on jacob0; calc_qnull
+    // populates qnull_ with N · qnull_grad_ using the current J_.
+    void null_sigma(Eigen::VectorXd& sigma_out) const;
+    void jacobm_fd(Eigen::VectorXd& Jm_out);
+    void calc_qnull();
 
     // Ported from RTB methods.cpp:673-718
     static void angle_axis(const Eigen::Matrix4d& Te,

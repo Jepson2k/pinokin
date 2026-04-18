@@ -59,6 +59,10 @@ class IKSolver:
         max_iter: int = 30,
         max_restarts: int = 100,
         enforce_limits: bool = True,
+        kq: float = 0.0,
+        km: float = 0.0,
+        ps: float = 0.0,
+        pi: float = 0.3,
     ) -> None: ...
     def solve(
         self,

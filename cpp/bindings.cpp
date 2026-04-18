@@ -71,7 +71,8 @@ NB_MODULE(_core, m) {
 
     nb::class_<IKSolver>(m, "IKSolver")
         .def(nb::init<const Robot&, IKSolver::Method, IKSolver::Damping,
-                       double, double, int, int, bool>(),
+                       double, double, int, int, bool,
+                       double, double, double, double>(),
              nb::arg("robot"),
              nb::arg("method") = IKSolver::Method::LM,
              nb::arg("damping") = IKSolver::Damping::Sugihara,
@@ -80,6 +81,10 @@ NB_MODULE(_core, m) {
              nb::arg("max_iter") = 30,
              nb::arg("max_restarts") = 100,
              nb::arg("enforce_limits") = true,
+             nb::arg("kq") = 0.0,
+             nb::arg("km") = 0.0,
+             nb::arg("ps") = 0.0,
+             nb::arg("pi") = 0.3,
              nb::keep_alive<1, 2>())  // IKSolver refs Robot
         .def("solve",
              [](IKSolver& s, const Eigen::Matrix4d& Tep,
