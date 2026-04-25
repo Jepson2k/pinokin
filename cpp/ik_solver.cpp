@@ -43,6 +43,8 @@ IKSolver::IKSolver(const Robot& robot, Method method, Damping damping,
     residual_ = 0.0;
     iterations_ = 0;
     restarts_ = 0;
+
+    detect_spherical_wrist();
 }
 
 void IKSolver::set_we(const Eigen::VectorXd& we) {
@@ -80,6 +82,7 @@ bool IKSolver::solve(const Eigen::Matrix4d& Tep, const Eigen::VectorXd* q0) {
 // ===== Gauss-Newton (ported from _IK_GN in ik.cpp) =====
 void IKSolver::solve_gn(const Eigen::Matrix4d& Tep) {
     int search = 0;
+    bool wrist_flip_tried = false;
 
     while (search <= max_restarts_) {
         int iter = 1;
@@ -100,7 +103,6 @@ void IKSolver::solve_gn(const Eigen::Matrix4d& Tep) {
                 } else {
                     success_ = true;
                 }
-                iterations_ += iter;
                 break;
             }
 
@@ -117,20 +119,32 @@ void IKSolver::solve_gn(const Eigen::Matrix4d& Tep) {
             iter += 1;
         }
 
+        // Count attempt iterations once: if inner loop broke at convergence,
+        // iter is the converging step (1-indexed); if it exhausted naturally,
+        // iter == max_iter_+1 and we cap to max_iter_.
+        iterations_ += (iter > max_iter_ ? max_iter_ : iter);
+
         if (success_) {
             break;
         }
 
-        iterations_ += iter;
         search += 1;
         restarts_ = search;
-        rand_q();
+        if (search <= max_restarts_) {
+            if (!wrist_flip_tried && wrist_only_violations()) {
+                apply_wrist_flip();
+                wrist_flip_tried = true;
+            } else {
+                rand_q();
+            }
+        }
     }
 }
 
 // ===== Newton-Raphson (ported from _IK_NR in ik.cpp) =====
 void IKSolver::solve_nr(const Eigen::Matrix4d& Tep) {
     int search = 0;
+    bool wrist_flip_tried = false;
 
     while (search <= max_restarts_) {
         int iter = 1;
@@ -151,7 +165,6 @@ void IKSolver::solve_nr(const Eigen::Matrix4d& Tep) {
                 } else {
                     success_ = true;
                 }
-                iterations_ += iter;
                 break;
             }
 
@@ -168,20 +181,29 @@ void IKSolver::solve_nr(const Eigen::Matrix4d& Tep) {
             iter += 1;
         }
 
+        iterations_ += (iter > max_iter_ ? max_iter_ : iter);
+
         if (success_) {
             break;
         }
 
-        iterations_ += iter;
         search += 1;
         restarts_ = search;
-        rand_q();
+        if (search <= max_restarts_) {
+            if (!wrist_flip_tried && wrist_only_violations()) {
+                apply_wrist_flip();
+                wrist_flip_tried = true;
+            } else {
+                rand_q();
+            }
+        }
     }
 }
 
 // ===== Levenberg-Marquardt (all 3 damping variants) =====
 void IKSolver::solve_lm(const Eigen::Matrix4d& Tep) {
     int search = 0;
+    bool wrist_flip_tried = false;
 
     while (search <= max_restarts_) {
         int iter = 1;
@@ -202,7 +224,6 @@ void IKSolver::solve_lm(const Eigen::Matrix4d& Tep) {
                 } else {
                     success_ = true;
                 }
-                iterations_ += iter;
                 break;
             }
 
@@ -236,14 +257,26 @@ void IKSolver::solve_lm(const Eigen::Matrix4d& Tep) {
             iter += 1;
         }
 
+        iterations_ += (iter > max_iter_ ? max_iter_ : iter);
+
         if (success_) {
             break;
         }
 
-        iterations_ += iter;
         search += 1;
         restarts_ = search;
-        rand_q();
+        if (search <= max_restarts_) {
+            // First restart on a wrist-only-violation: try the deterministic
+            // wrist flip before falling back to random restarts. This finds
+            // the kinematically-equivalent IK branch in joint space without
+            // a stochastic search.
+            if (!wrist_flip_tried && wrist_only_violations()) {
+                apply_wrist_flip();
+                wrist_flip_tried = true;
+            } else {
+                rand_q();
+            }
+        }
     }
 }
 
@@ -309,6 +342,62 @@ void IKSolver::rand_q() {
     for (int i = 0; i < robot_.nq(); i++) {
         q_(i) = ql(i) + dist(rng_) * (qh(i) - ql(i));
     }
+}
+
+// ===== Detect spherical wrist: last 3 joint axes intersect at one point =====
+// Probes the linear-velocity columns of the world Jacobian at q=0. If all
+// three wrist axes pass through a common point (the wrist center), then the
+// EE-linear-velocity contributions from each are coplanar (all perpendicular
+// to (p_ee - p_wrist_center)), making the 3x3 block rank-deficient.
+void IKSolver::detect_spherical_wrist() {
+    int n = robot_.nq();
+    if (n < 3) {
+        has_spherical_wrist_ = false;
+        return;
+    }
+    Eigen::VectorXd q_zero = Eigen::VectorXd::Zero(n);
+    Eigen::Matrix<double, 6, Eigen::Dynamic> J(6, n);
+    J.setZero();
+    // Manually invoke FK + Jacobian at q=0 (don't disturb solver state)
+    auto saved_q = q_;
+    q_ = q_zero;
+    compute_fk_and_jacob0();
+    J = J_;
+    q_ = saved_q;
+
+    // Last 3 linear-velocity columns
+    Eigen::Matrix3d last3 = J.block<3, 3>(0, n - 3);
+    Eigen::JacobiSVD<Eigen::Matrix3d> svd(last3);
+    // Spherical wrist iff smallest singular value is near zero (rank ≤ 2)
+    double smallest = svd.singularValues()(2);
+    has_spherical_wrist_ = (smallest < 1e-4);
+    wrist_start_ = has_spherical_wrist_ ? (n - 3) : -1;
+}
+
+// ===== Are all out-of-limit joints in the wrist? =====
+bool IKSolver::wrist_only_violations() const {
+    if (!has_spherical_wrist_) return false;
+    const auto& ql = robot_.lower_limits();
+    const auto& qh = robot_.upper_limits();
+    bool any_violation = false;
+    for (int i = 0; i < robot_.nq(); i++) {
+        if (q_(i) < ql(i) || q_(i) > qh(i)) {
+            if (i < wrist_start_) return false;  // non-wrist violation
+            any_violation = true;
+        }
+    }
+    return any_violation;
+}
+
+// ===== Wrist flip: q[w]+π, -q[w+1], q[w+2]+π =====
+// Pose-preserving for any robot with a spherical wrist (last 3 axes intersect).
+// Generates the alternative IK solution that exists in joint space when the
+// initial LM convergence lands on a wrist branch outside joint limits.
+void IKSolver::apply_wrist_flip() {
+    int w = wrist_start_;
+    q_(w)     += PI;
+    q_(w + 1) = -q_(w + 1);
+    q_(w + 2) += PI;
 }
 
 // ===== Fused FK + Jacobian (single Pinocchio pass) =====
