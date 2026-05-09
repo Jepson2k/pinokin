@@ -8,4 +8,5 @@ dependencies:
   - numpy>=2.0
   - cmake
   - scikit-build-core
+  - pip
   - pytest
