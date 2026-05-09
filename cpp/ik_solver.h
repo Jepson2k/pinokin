@@ -79,6 +79,17 @@ private:
     bool check_limits() const;
     void rand_q();
 
+    // Structured restart: detect spherical wrist (last 3 axes intersect)
+    // at construction; on a converged-but-limits-violated solution where
+    // ONLY wrist joints violate, try the wrist-flip transformation
+    // (q[w]+π, -q[w+1], q[w+2]+π) before falling back to rand_q.
+    void detect_spherical_wrist();
+    bool wrist_only_violations() const;
+    void apply_wrist_flip();
+
+    bool has_spherical_wrist_ = false;
+    int wrist_start_ = -1;
+
     // Fused FK + Jacobian: single forwardKinematics pass, one frame update
     void compute_fk_and_jacob0();
 
