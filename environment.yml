@@ -3,6 +3,7 @@ channels:
   - conda-forge
 dependencies:
   - pinocchio
+  - coal
   - eigen
   - nanobind
   - numpy>=2.0
