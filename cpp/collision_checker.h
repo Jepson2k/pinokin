@@ -59,8 +59,10 @@ public:
                        bool include_endpoints = true) const;
 
     // Pre-sampled trajectory check. Returns first colliding row index,
-    // or -1 if clear.
-    int check_path(const Eigen::MatrixXd& q_path) const;
+    // or -1 if clear. Row-major to match numpy's default layout.
+    using PathMatrix =
+        Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>;
+    int check_path(const PathMatrix& q_path) const;
 
     // ----- Runtime geometry: world obstacles (parented to universe) ----
     std::size_t add_obstacle_box(const std::string& name,

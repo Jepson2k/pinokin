@@ -7,6 +7,8 @@
 #include <pinocchio/algorithm/frames.hpp>
 #include <pinocchio/multibody/geometry.hpp>
 #include <pinocchio/spatial/se3.hpp>
+#include <pinocchio/collision/collision.hpp>
+#include <pinocchio/collision/distance.hpp>
 
 #include <algorithm>
 #include <filesystem>
@@ -19,10 +21,12 @@
 #if __has_include(<coal/shape/geometric_shapes.h>)
 #  include <coal/shape/geometric_shapes.h>
 #  include <coal/mesh_loader/loader.h>
+#  include <coal/BVH/BVH_model.h>
 namespace pinokin_fcl = coal;
 #elif __has_include(<hpp/fcl/shape/geometric_shapes.h>)
 #  include <hpp/fcl/shape/geometric_shapes.h>
 #  include <hpp/fcl/mesh_loader/loader.h>
+#  include <hpp/fcl/BVH/BVH_model.h>
 namespace pinokin_fcl = hpp::fcl;
 #else
 #  error "Neither <coal/...> nor <hpp/fcl/...> headers found. " \
@@ -157,7 +161,7 @@ bool CollisionChecker::check_segment(const Eigen::VectorXd& q0,
     return false;
 }
 
-int CollisionChecker::check_path(const Eigen::MatrixXd& q_path) const {
+int CollisionChecker::check_path(const PathMatrix& q_path) const {
     const Eigen::Index n = q_path.rows();
     for (Eigen::Index i = 0; i < n; ++i) {
         Eigen::VectorXd qi = q_path.row(i).transpose();
@@ -218,10 +222,10 @@ std::size_t CollisionChecker::add_obstacle_box(
     auto shape = make_shape_ptr<pinokin_fcl::Box>(
         2.0 * half_extents.x(), 2.0 * half_extents.y(), 2.0 * half_extents.z());
     pinocchio::GeometryObject obj(name,
-                                  /*parent_frame=*/0,
-                                  /*parent_joint=*/0,
-                                  shape,
-                                  se3_from_matrix4(world_pose));
+                                  /*parent_joint=*/pinocchio::JointIndex(0),
+                                  /*parent_frame=*/pinocchio::FrameIndex(0),
+                                  se3_from_matrix4(world_pose),
+                                  shape);
     return add_geometry_object_(std::move(obj), GeomKind::World);
 }
 
@@ -229,8 +233,9 @@ std::size_t CollisionChecker::add_obstacle_sphere(
     const std::string& name, double radius,
     const Eigen::Matrix4d& world_pose) {
     auto shape = make_shape_ptr<pinokin_fcl::Sphere>(radius);
-    pinocchio::GeometryObject obj(name, 0, 0, shape,
-                                  se3_from_matrix4(world_pose));
+    pinocchio::GeometryObject obj(name, pinocchio::JointIndex(0),
+                                  pinocchio::FrameIndex(0),
+                                  se3_from_matrix4(world_pose), shape);
     return add_geometry_object_(std::move(obj), GeomKind::World);
 }
 
@@ -238,8 +243,9 @@ std::size_t CollisionChecker::add_obstacle_cylinder(
     const std::string& name, double radius, double length,
     const Eigen::Matrix4d& world_pose) {
     auto shape = make_shape_ptr<pinokin_fcl::Cylinder>(radius, length);
-    pinocchio::GeometryObject obj(name, 0, 0, shape,
-                                  se3_from_matrix4(world_pose));
+    pinocchio::GeometryObject obj(name, pinocchio::JointIndex(0),
+                                  pinocchio::FrameIndex(0),
+                                  se3_from_matrix4(world_pose), shape);
     return add_geometry_object_(std::move(obj), GeomKind::World);
 }
 
@@ -249,8 +255,9 @@ std::size_t CollisionChecker::add_obstacle_mesh(
     const Eigen::Vector3d& mesh_scale) {
     pinokin_fcl::MeshLoader loader;
     auto shape = loader.load(mesh_path, mesh_scale);
-    pinocchio::GeometryObject obj(name, 0, 0, shape,
-                                  se3_from_matrix4(world_pose));
+    pinocchio::GeometryObject obj(name, pinocchio::JointIndex(0),
+                                  pinocchio::FrameIndex(0),
+                                  se3_from_matrix4(world_pose), shape);
     obj.meshPath = mesh_path;
     obj.meshScale = mesh_scale;
     return add_geometry_object_(std::move(obj), GeomKind::World);
@@ -280,8 +287,9 @@ std::size_t CollisionChecker::attach_box_to_frame(
     const auto pj = resolve_parent_joint_(parent_frame, p);
     auto shape = make_shape_ptr<pinokin_fcl::Box>(
         2.0 * half_extents.x(), 2.0 * half_extents.y(), 2.0 * half_extents.z());
-    pinocchio::GeometryObject obj(name, /*parent_frame=*/0, pj, shape,
-                                  se3_from_matrix4(p));
+    pinocchio::GeometryObject obj(name, /*parent_joint=*/pj,
+                                  /*parent_frame=*/0,
+                                  se3_from_matrix4(p), shape);
     return add_geometry_object_(std::move(obj), GeomKind::Attached);
 }
 
@@ -291,7 +299,7 @@ std::size_t CollisionChecker::attach_sphere_to_frame(
     Eigen::Matrix4d p = placement;
     const auto pj = resolve_parent_joint_(parent_frame, p);
     auto shape = make_shape_ptr<pinokin_fcl::Sphere>(radius);
-    pinocchio::GeometryObject obj(name, 0, pj, shape, se3_from_matrix4(p));
+    pinocchio::GeometryObject obj(name, pj, 0, se3_from_matrix4(p), shape);
     return add_geometry_object_(std::move(obj), GeomKind::Attached);
 }
 
@@ -301,7 +309,7 @@ std::size_t CollisionChecker::attach_cylinder_to_frame(
     Eigen::Matrix4d p = placement;
     const auto pj = resolve_parent_joint_(parent_frame, p);
     auto shape = make_shape_ptr<pinokin_fcl::Cylinder>(radius, length);
-    pinocchio::GeometryObject obj(name, 0, pj, shape, se3_from_matrix4(p));
+    pinocchio::GeometryObject obj(name, pj, 0, se3_from_matrix4(p), shape);
     return add_geometry_object_(std::move(obj), GeomKind::Attached);
 }
 
@@ -313,7 +321,7 @@ std::size_t CollisionChecker::attach_mesh_to_frame(
     const auto pj = resolve_parent_joint_(parent_frame, p);
     pinokin_fcl::MeshLoader loader;
     auto shape = loader.load(mesh_path, mesh_scale);
-    pinocchio::GeometryObject obj(name, 0, pj, shape, se3_from_matrix4(p));
+    pinocchio::GeometryObject obj(name, pj, 0, se3_from_matrix4(p), shape);
     obj.meshPath = mesh_path;
     obj.meshScale = mesh_scale;
     return add_geometry_object_(std::move(obj), GeomKind::Attached);
@@ -473,6 +481,20 @@ void CollisionChecker::populate_default_pairs(bool remove_adjacent_pairs) {
 
 void CollisionChecker::rebuild_geom_data_() {
     geom_data_ = pinocchio::GeometryData(geom_model_);
+    // Pinocchio enables coal's deprecated GJK warm-start by default
+    // (geometry.hxx sets enable_cached_gjk_guess = true). The cached guess
+    // can produce false-negatives when a colliding query follows a sequence
+    // of non-colliding queries on the same pair, because GJK warm-starts
+    // from a stale separating direction. Force DefaultGuess on every pair
+    // for deterministic, query-independent results.
+    for (auto& creq : geom_data_.collisionRequests) {
+        creq.gjk_initial_guess = pinokin_fcl::GJKInitialGuess::DefaultGuess;
+        creq.enable_cached_gjk_guess = false;
+    }
+    for (auto& dreq : geom_data_.distanceRequests) {
+        dreq.gjk_initial_guess = pinokin_fcl::GJKInitialGuess::DefaultGuess;
+        dreq.enable_cached_gjk_guess = false;
+    }
 }
 
 void CollisionChecker::rebuild_name_index_() {

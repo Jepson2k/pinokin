@@ -6,12 +6,14 @@ suite doesn't depend on external mesh files.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 import pytest
 
 from pinokin import CollisionChecker
 
-from .conftest import COLLISION_URDF_PATH
+COLLISION_URDF_PATH = str(Path(__file__).parent / "collision_two_link.urdf")
 
 
 def test_load_geom_from_urdf(checker):
