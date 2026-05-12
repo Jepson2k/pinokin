@@ -49,23 +49,27 @@ def test_segment_check_clear_to_clear(collision_robot, checker):
 
 
 def test_check_path_returns_first_colliding(collision_robot, checker):
-    q_path = np.array([
-        [0.0, 0.0],
-        [0.0, 0.5],
-        [0.0, 1.0],
-        [0.0, np.pi],
-        [0.0, np.pi],
-    ])
+    q_path = np.array(
+        [
+            [0.0, 0.0],
+            [0.0, 0.5],
+            [0.0, 1.0],
+            [0.0, np.pi],
+            [0.0, np.pi],
+        ]
+    )
     idx = checker.check_path(q_path)
     assert idx == 3
 
 
 def test_check_path_all_clear(collision_robot, checker):
-    q_path = np.array([
-        [0.0, 0.0],
-        [0.1, 0.1],
-        [0.2, 0.2],
-    ])
+    q_path = np.array(
+        [
+            [0.0, 0.0],
+            [0.1, 0.1],
+            [0.2, 0.2],
+        ]
+    )
     assert checker.check_path(q_path) == -1
 
 
@@ -140,18 +144,14 @@ def test_has_geometry(fresh_checker):
 def test_attach_box_to_wrist_clear_at_home(collision_robot, fresh_checker):
     placement = np.eye(4)
     placement[2, 3] = 0.25
-    fresh_checker.attach_box_to_frame(
-        "gripper", np.array([0.03, 0.03, 0.05]), "L2", placement
-    )
+    fresh_checker.attach_box_to_frame("gripper", np.array([0.03, 0.03, 0.05]), "L2", placement)
     assert fresh_checker.in_collision(np.zeros(collision_robot.nq)) is False
 
 
 def test_attached_payload_collides_when_folded(collision_robot, fresh_checker):
     placement = np.eye(4)
     placement[2, 3] = 0.30
-    fresh_checker.attach_box_to_frame(
-        "payload", np.array([0.05, 0.05, 0.05]), "L2", placement
-    )
+    fresh_checker.attach_box_to_frame("payload", np.array([0.05, 0.05, 0.05]), "L2", placement)
     q = np.array([0.0, np.pi])
     assert fresh_checker.in_collision(q) is True
 
@@ -159,9 +159,7 @@ def test_attached_payload_collides_when_folded(collision_robot, fresh_checker):
 def test_release_payload_to_world(collision_robot, fresh_checker):
     placement = np.eye(4)
     placement[2, 3] = 0.30
-    fresh_checker.attach_box_to_frame(
-        "payload", np.array([0.05, 0.05, 0.05]), "L2", placement
-    )
+    fresh_checker.attach_box_to_frame("payload", np.array([0.05, 0.05, 0.05]), "L2", placement)
     q_home = np.zeros(collision_robot.nq)
     fresh_checker.update_placements(q_home)
     world_pose = fresh_checker.geometry_world_pose("payload")
