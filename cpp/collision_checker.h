@@ -44,8 +44,10 @@ public:
     // Fast boolean check, early-exits on first colliding pair.
     bool in_collision(const Eigen::VectorXd& q) const;
 
-    // All pairs in collision (no early exit). Indices into geom_model_.
-    std::vector<std::pair<std::size_t, std::size_t>>
+    // All pairs in collision (no early exit). Pairs are geometry object
+    // names (URDF link names for arm geometry, the user-supplied name for
+    // runtime-attached objects).
+    std::vector<std::pair<std::string, std::string>>
     colliding_pairs(const Eigen::VectorXd& q) const;
 
     // Min distance across all enabled pairs. Negative => penetration.

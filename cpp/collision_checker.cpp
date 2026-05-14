@@ -112,17 +112,19 @@ bool CollisionChecker::in_collision(const Eigen::VectorXd& q) const {
                                         /*stopAtFirstCollision=*/true);
 }
 
-std::vector<std::pair<std::size_t, std::size_t>>
+std::vector<std::pair<std::string, std::string>>
 CollisionChecker::colliding_pairs(const Eigen::VectorXd& q) const {
     pinocchio::computeCollisions(robot_.model(), robot_.data(),
                                  geom_model_, geom_data_, q,
                                  /*stopAtFirstCollision=*/false);
-    std::vector<std::pair<std::size_t, std::size_t>> out;
+    std::vector<std::pair<std::string, std::string>> out;
     const auto& pairs = geom_model_.collisionPairs;
+    const auto& objects = geom_model_.geometryObjects;
     out.reserve(pairs.size());
     for (std::size_t k = 0; k < pairs.size(); ++k) {
         if (geom_data_.collisionResults[k].isCollision()) {
-            out.emplace_back(pairs[k].first, pairs[k].second);
+            out.emplace_back(objects[pairs[k].first].name,
+                             objects[pairs[k].second].name);
         }
     }
     return out;
@@ -201,8 +203,15 @@ std::size_t CollisionChecker::add_geometry_object_(
                 // Skip same-joint and parent/child to avoid trivial contacts.
                 add_pair = !is_adjacent_joint_(new_obj.parentJoint,
                                                other_obj.parentJoint);
-            } else if (ok == GeomKind::World || ok == GeomKind::Attached) {
+            } else if (ok == GeomKind::World) {
                 add_pair = true;
+            } else if (ok == GeomKind::Attached) {
+                // Parts of the same tool (sharing the parent joint) are
+                // physically constrained relative to each other — pairing
+                // them produces simplified-mesh false positives without
+                // catching any real collision. Cross-tool / payload-vs-
+                // tool pairs do still want to be checked.
+                add_pair = (new_obj.parentJoint != other_obj.parentJoint);
             }
         }
 
@@ -267,11 +276,22 @@ pinocchio::JointIndex CollisionChecker::resolve_parent_joint_(
     const std::string& parent_frame,
     Eigen::Matrix4d& placement_in_joint) const {
     const auto& model = robot_.model();
-    if (!model.existFrame(parent_frame)) {
+    // Names like "L6" can resolve to BOTH a joint frame and a body
+    // frame, in which case getFrameId(name) raises on ambiguity. For
+    // attaching collision geometry to a link, BODY is the natural
+    // choice; fall back to JOINT for names that don't correspond to a
+    // rigid body (rare — fixed-frame attachment points).
+    pinocchio::FrameIndex fid = model.nframes;
+    if (model.existFrame(parent_frame, pinocchio::BODY)) {
+        fid = model.getFrameId(parent_frame, pinocchio::BODY);
+    } else if (model.existFrame(parent_frame, pinocchio::JOINT)) {
+        fid = model.getFrameId(parent_frame, pinocchio::JOINT);
+    } else if (model.existFrame(parent_frame)) {
+        fid = model.getFrameId(parent_frame);
+    } else {
         throw std::runtime_error(
             "CollisionChecker: frame '" + parent_frame + "' not found");
     }
-    const auto fid = model.getFrameId(parent_frame);
     const auto& frame = model.frames[fid];
     // Compose: jMnew = jMframe * user_placement
     const pinocchio::SE3 jMnew =

@@ -34,6 +34,10 @@ def test_folded_self_collision(collision_robot, checker):
     assert checker.in_collision(q) is True
     pairs = checker.colliding_pairs(q)
     assert len(pairs) >= 1
+    # Names, not indices — every pair is two URDF link names.
+    a, b = pairs[0]
+    assert isinstance(a, str) and isinstance(b, str)
+    assert {a, b} <= set(checker.geometry_names)
 
 
 def test_segment_check_clear_to_colliding(collision_robot, checker):
