@@ -1,10 +1,10 @@
 [build-system]
-requires = ["scikit-build-core>=0.10", "nanobind>=2.0", "numpy>=2.0"]
+requires = ["scikit-build-core>=0.10", "nanobind>=2.0", "numpy>=2.0", "setuptools-scm>=8"]
 build-backend = "scikit_build_core.build"
 
 [project]
 name = "pinokin"
-version = "0.1.6"
+dynamic = ["version"]
 description = "FK, Jacobians, and IK for URDF robots — Pinocchio C++ backend with nanobind Python bindings"
 license = "MIT"
 readme = "README.md"
@@ -20,6 +20,10 @@ dev = ["pytest>=7.0", "ruff", "ty", "pre-commit"]
 [tool.scikit-build]
 wheel.packages = ["src/pinokin"]
 build-dir = "build/{wheel_tag}"
+metadata.version.provider = "scikit_build_core.metadata.setuptools_scm"
+
+[tool.setuptools_scm]
+# Version comes from the latest git tag reachable from HEAD.
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
