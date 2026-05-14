@@ -8,5 +8,6 @@ dependencies:
   - numpy>=2.0
   - cmake
   - scikit-build-core
+  - setuptools_scm
   - pip
   - pytest
