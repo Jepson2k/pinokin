@@ -7,6 +7,7 @@
 
 #include <Eigen/Dense>
 #include <pinocchio/fwd.hpp>
+#include <pinocchio/multibody/data.hpp>
 #include <pinocchio/multibody/geometry.hpp>
 
 namespace pinokin {
@@ -15,8 +16,9 @@ class Robot;
 
 // Wraps pinocchio::GeometryModel + GeometryData and provides fast
 // boolean / pair-list / distance queries plus runtime obstacle, gripper,
-// and payload management. Shares the Robot's pinocchio::Data so a query
-// reuses the same FK state.
+// and payload management. Owns a private pinocchio::Data: every query
+// recomputes FK from its q argument, so sharing the Robot's Data bought
+// nothing and only risked cross-component interference.
 //
 // Pair policy:
 //   - URDF-loaded link geometry: all-pairs minus parent/child adjacency
@@ -111,7 +113,7 @@ public:
                                    const Eigen::Matrix4d& pose);
 
     // Returns the current world pose of a geometry, computed via the
-    // robot's current FK state. Caller must have run a query (or call
+    // checker's current FK state. Caller must have run a query (or call
     // update_placements(q)) first to refresh data_.
     Eigen::Matrix4d geometry_world_pose(const std::string& name) const;
 
@@ -158,6 +160,8 @@ private:
     const Robot& robot_;
     pinocchio::GeometryModel geom_model_;
     mutable pinocchio::GeometryData geom_data_;
+    // Owned FK scratch for queries — see class comment (not the Robot's Data).
+    mutable pinocchio::Data data_;
 
     // Names -> handle for runtime-added geometry (gripper, payload,
     // world obstacles). URDF-loaded link geometry names also live here.

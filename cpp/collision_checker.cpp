@@ -58,7 +58,7 @@ CollisionChecker::CollisionChecker(const Robot& robot,
                                    const std::vector<std::string>& package_dirs,
                                    bool add_all_pairs,
                                    bool remove_adjacent_pairs)
-    : robot_(robot) {
+    : robot_(robot), data_(robot.model()) {
     std::vector<std::string> dirs = package_dirs;
     if (dirs.empty()) {
         try {
@@ -107,14 +107,14 @@ void CollisionChecker::remove_collision_pair(std::size_t first,
 }
 
 bool CollisionChecker::in_collision(const Eigen::VectorXd& q) const {
-    return pinocchio::computeCollisions(robot_.model(), robot_.data(),
+    return pinocchio::computeCollisions(robot_.model(), data_,
                                         geom_model_, geom_data_, q,
                                         /*stopAtFirstCollision=*/true);
 }
 
 std::vector<std::pair<std::string, std::string>>
 CollisionChecker::colliding_pairs(const Eigen::VectorXd& q) const {
-    pinocchio::computeCollisions(robot_.model(), robot_.data(),
+    pinocchio::computeCollisions(robot_.model(), data_,
                                  geom_model_, geom_data_, q,
                                  /*stopAtFirstCollision=*/false);
     std::vector<std::pair<std::string, std::string>> out;
@@ -131,7 +131,7 @@ CollisionChecker::colliding_pairs(const Eigen::VectorXd& q) const {
 }
 
 double CollisionChecker::min_distance(const Eigen::VectorXd& q) const {
-    pinocchio::computeDistances(robot_.model(), robot_.data(),
+    pinocchio::computeDistances(robot_.model(), data_,
                                 geom_model_, geom_data_, q);
     double best = std::numeric_limits<double>::infinity();
     for (const auto& r : geom_data_.distanceResults) {
@@ -439,7 +439,7 @@ void CollisionChecker::reparent_geometry_by_name(
 }
 
 void CollisionChecker::update_placements(const Eigen::VectorXd& q) const {
-    pinocchio::updateGeometryPlacements(robot_.model(), robot_.data(),
+    pinocchio::updateGeometryPlacements(robot_.model(), data_,
                                         geom_model_, geom_data_, q);
 }
 
