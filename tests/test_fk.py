@@ -5,9 +5,7 @@ def test_fk_zero_config(robot):
     q = np.zeros(robot.nq)
     T = robot.fkine(q)
     assert T.shape == (4, 4)
-    # Must be valid SE3: bottom row [0,0,0,1]
     np.testing.assert_allclose(T[3, :], [0, 0, 0, 1], atol=1e-12)
-    # Rotation part must be orthogonal
     R = T[:3, :3]
     np.testing.assert_allclose(R @ R.T, np.eye(3), atol=1e-10)
     np.testing.assert_allclose(np.linalg.det(R), 1.0, atol=1e-10)
@@ -17,7 +15,6 @@ def test_fk_varies_with_q(robot):
     T0 = robot.fkine(np.zeros(robot.nq))
     q1 = np.array([0.5, -1.0, 3.0, 0.3, 0.2, 1.0])
     T1 = robot.fkine(q1)
-    # Different configs must give different poses
     assert not np.allclose(T0, T1, atol=1e-6)
 
 
@@ -57,9 +54,8 @@ def test_tool_transform_fk(robot):
     assert robot.has_tool_transform
 
     T_with_tool = robot.fkine(q)
-    # Position should differ by the rotated tool offset
     assert not np.allclose(T_no_tool[:3, 3], T_with_tool[:3, 3], atol=1e-6)
-    # The difference should be R_ee @ [0, 0, 0.1]
+    # Tool offset is in the EE local frame, so rotate it into base frame by R_ee
     R_ee = T_no_tool[:3, :3]
     expected_pos = T_no_tool[:3, 3] + R_ee @ np.array([0.0, 0.0, 0.1])
     np.testing.assert_allclose(T_with_tool[:3, 3], expected_pos, atol=1e-10)

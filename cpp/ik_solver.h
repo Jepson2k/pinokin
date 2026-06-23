@@ -54,9 +54,9 @@ private:
 
     // Pre-allocated workspace (fixed-size for 6-DOF fast path)
     Eigen::Matrix<double, 6, Eigen::Dynamic> J_;   // 6 x nq
-    Eigen::Matrix<double, 6, 1> e_;                 // 6
+    Eigen::Matrix<double, 6, 1> e_;
     Eigen::MatrixXd JtWJ_;   // nq x nq
-    Eigen::VectorXd g_;      // nq
+    Eigen::VectorXd g_;
     Eigen::Matrix4d Te_;     // current FK
 
     // Results

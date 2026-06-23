@@ -52,7 +52,6 @@ void IKSolver::set_we(const Eigen::VectorXd& we) {
         throw std::runtime_error("we must be a 6-vector");
     }
     We_ = we.asDiagonal();
-    // Check if we is all ones (identity)
     we_is_identity_ = we.isApprox(Eigen::VectorXd::Ones(6));
 }
 
@@ -79,7 +78,7 @@ bool IKSolver::solve(const Eigen::Matrix4d& Tep, const Eigen::VectorXd* q0) {
     return success_;
 }
 
-// ===== Gauss-Newton (ported from _IK_GN in ik.cpp) =====
+// Gauss-Newton (ported from _IK_GN in ik.cpp).
 void IKSolver::solve_gn(const Eigen::Matrix4d& Tep) {
     int search = 0;
     bool wrist_flip_tried = false;
@@ -141,7 +140,7 @@ void IKSolver::solve_gn(const Eigen::Matrix4d& Tep) {
     }
 }
 
-// ===== Newton-Raphson (ported from _IK_NR in ik.cpp) =====
+// Newton-Raphson (ported from _IK_NR in ik.cpp).
 void IKSolver::solve_nr(const Eigen::Matrix4d& Tep) {
     int search = 0;
     bool wrist_flip_tried = false;
@@ -174,7 +173,6 @@ void IKSolver::solve_nr(const Eigen::Matrix4d& Tep) {
                     J_, Eigen::ComputeThinU | Eigen::ComputeThinV);
                 q_ += svd.solve(e_);
             } else {
-                // Square case: direct solve
                 q_ += J_.colPivHouseholderQr().solve(e_);
             }
 
@@ -200,7 +198,7 @@ void IKSolver::solve_nr(const Eigen::Matrix4d& Tep) {
     }
 }
 
-// ===== Levenberg-Marquardt (all 3 damping variants) =====
+// Levenberg-Marquardt (all 3 damping variants).
 void IKSolver::solve_lm(const Eigen::Matrix4d& Tep) {
     int search = 0;
     bool wrist_flip_tried = false;
@@ -227,7 +225,6 @@ void IKSolver::solve_lm(const Eigen::Matrix4d& Tep) {
                 break;
             }
 
-            // Compute damping scalar
             double wn;
             switch (damping_) {
                 case Damping::Chan:
@@ -241,7 +238,6 @@ void IKSolver::solve_lm(const Eigen::Matrix4d& Tep) {
                     break;
             }
 
-            // Build J^T * We * J + wn * I and gradient
             if (we_is_identity_) {
                 g_.noalias() = J_.transpose() * e_;
                 JtWJ_.noalias() = J_.transpose() * J_;
@@ -249,7 +245,7 @@ void IKSolver::solve_lm(const Eigen::Matrix4d& Tep) {
                 g_.noalias() = J_.transpose() * (We_ * e_);
                 JtWJ_.noalias() = J_.transpose() * We_ * J_;
             }
-            // Add damping to diagonal (avoids allocating Wn_ matrix)
+            // Damp the diagonal in place to avoid allocating a Wn_ matrix.
             JtWJ_.diagonal().array() += wn;
 
             q_ += JtWJ_.colPivHouseholderQr().solve(g_);
@@ -280,10 +276,10 @@ void IKSolver::solve_lm(const Eigen::Matrix4d& Tep) {
     }
 }
 
-// ===== Wrap solution angles to stay within joint limits =====
+// Wrap solution angles to stay within joint limits.
 // For each joint, tries q, q±2π, and wrapToPi(q). Among all variants that
 // fall within limits, picks the one closest to q0_ (the seed) to minimize
-// unnecessary joint motion. This replaces the old separate unwrap_angles step.
+// unnecessary joint motion.
 void IKSolver::wrap_to_limits() {
     const auto& ql = robot_.lower_limits();
     const auto& qh = robot_.upper_limits();
@@ -294,7 +290,6 @@ void IKSolver::wrap_to_limits() {
         double ql_max = qh(i);
         double q0i = q0_(i);
 
-        // Candidates: original, ±2π, wrapToPi
         double candidates[4] = {q_orig, q_orig + PI_x2, q_orig - PI_x2, wrapToPi(q_orig)};
 
         double best = q_orig;
@@ -318,8 +313,7 @@ void IKSolver::wrap_to_limits() {
     }
 }
 
-// ===== Check joint limits =====
-// Ported from ik.cpp _check_lim
+// Ported from ik.cpp _check_lim.
 bool IKSolver::check_limits() const {
     const auto& ql = robot_.lower_limits();
     const auto& qh = robot_.upper_limits();
@@ -332,8 +326,7 @@ bool IKSolver::check_limits() const {
     return true;
 }
 
-// ===== Random q within joint limits =====
-// Ported from ik.cpp _rand_q
+// Random q within joint limits. Ported from ik.cpp _rand_q.
 void IKSolver::rand_q() {
     const auto& ql = robot_.lower_limits();
     const auto& qh = robot_.upper_limits();
@@ -344,7 +337,7 @@ void IKSolver::rand_q() {
     }
 }
 
-// ===== Detect spherical wrist: last 3 joint axes intersect at one point =====
+// Detect spherical wrist: last 3 joint axes intersect at one point.
 // Probes the linear-velocity columns of the world Jacobian at q=0. If all
 // three wrist axes pass through a common point (the wrist center), then the
 // EE-linear-velocity contributions from each are coplanar (all perpendicular
@@ -365,7 +358,6 @@ void IKSolver::detect_spherical_wrist() {
     J = J_;
     q_ = saved_q;
 
-    // Last 3 linear-velocity columns
     Eigen::Matrix3d last3 = J.block<3, 3>(0, n - 3);
     Eigen::JacobiSVD<Eigen::Matrix3d> svd(last3);
     // Spherical wrist iff smallest singular value is near zero (rank ≤ 2)
@@ -374,7 +366,7 @@ void IKSolver::detect_spherical_wrist() {
     wrist_start_ = has_spherical_wrist_ ? (n - 3) : -1;
 }
 
-// ===== Are all out-of-limit joints in the wrist? =====
+// Are all out-of-limit joints in the wrist?
 bool IKSolver::wrist_only_violations() const {
     if (!has_spherical_wrist_) return false;
     const auto& ql = robot_.lower_limits();
@@ -389,7 +381,7 @@ bool IKSolver::wrist_only_violations() const {
     return any_violation;
 }
 
-// ===== Wrist flip: q[w]+π, -q[w+1], q[w+2]+π =====
+// Wrist flip: q[w]+π, -q[w+1], q[w+2]+π.
 // Pose-preserving for any robot with a spherical wrist (last 3 axes intersect).
 // Generates the alternative IK solution that exists in joint space when the
 // initial LM convergence lands on a wrist branch outside joint limits.
@@ -400,27 +392,23 @@ void IKSolver::apply_wrist_flip() {
     q_(w + 2) += PI;
 }
 
-// ===== Fused FK + Jacobian (single Pinocchio pass) =====
+// Fused FK + Jacobian: a single Pinocchio pass per call.
 void IKSolver::compute_fk_and_jacob0() {
     const auto& model = robot_.model();
     auto& data = robot_.data();
     auto frame_id = robot_.ee_frame_id();
 
-    // One pass: forwardKinematics + computeJointJacobians
     pinocchio::computeJointJacobians(model, data, q_);
     pinocchio::updateFramePlacement(model, data, frame_id);
 
-    // Extract FK
     Te_ = data.oMf[frame_id].toHomogeneousMatrix();
 
-    // Extract Jacobian (no recomputation — uses already-computed data)
+    // Reuses the data already populated above — no recomputation.
     J_.setZero();
     pinocchio::getFrameJacobian(model, data, frame_id,
                                 pinocchio::LOCAL_WORLD_ALIGNED, J_);
 
-    // Tool correction (if active)
     if (robot_.has_tool_transform()) {
-        // FK: post-multiply tool transform
         Te_ = Te_ * robot_.tool_transform();
         // Jacobian: v_tool = v_ee + omega x (R_ee * p_tool)
         Eigen::Vector3d r = data.oMf[frame_id].rotation() * robot_.tool_offset();
@@ -431,18 +419,14 @@ void IKSolver::compute_fk_and_jacob0() {
     }
 }
 
-// ===== angle_axis error function =====
-// Ported verbatim from RTB methods.cpp:673-718
+// angle_axis error function. Ported verbatim from RTB methods.cpp:673-718.
 void IKSolver::angle_axis(const Eigen::Matrix4d& Te,
                           const Eigen::Matrix4d& Tep,
                           Eigen::Matrix<double, 6, 1>& e) {
-    // e[:3] = Tep[:3, 3] - Te[:3, 3]
     e.head<3>() = Tep.block<3, 1>(0, 3) - Te.block<3, 1>(0, 3);
 
-    // R = Tep[:3, :3] @ Te[:3, :3].T
     Eigen::Matrix3d R = Tep.block<3, 3>(0, 0) * Te.block<3, 3>(0, 0).transpose();
 
-    // li = [R(2,1) - R(1,2), R(0,2) - R(2,0), R(1,0) - R(0,1)]
     Eigen::Vector3d li;
     li << R(2, 1) - R(1, 2), R(0, 2) - R(2, 0), R(1, 0) - R(0, 1);
 
@@ -467,7 +451,6 @@ void IKSolver::angle_axis(const Eigen::Matrix4d& Te,
     }
 }
 
-// ===== Batch IK =====
 IKSolver::BatchResult IKSolver::batch_ik(
     const std::vector<Eigen::Matrix4d>& poses,
     const Eigen::VectorXd& q_start,
@@ -494,7 +477,6 @@ IKSolver::BatchResult IKSolver::batch_ik(
             result.joint_positions.row(i).setZero();
             result.all_valid = false;
             if (stop_on_failure) {
-                // Zero + invalidate remaining rows and break
                 for (int j = i + 1; j < n_poses; ++j) {
                     result.joint_positions.row(j).setZero();
                     // valid[j] already false from resize
