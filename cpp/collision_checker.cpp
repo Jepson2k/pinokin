@@ -57,8 +57,9 @@ CollisionChecker::CollisionChecker(const Robot& robot,
                                    const std::string& urdf_path,
                                    const std::vector<std::string>& package_dirs,
                                    bool add_all_pairs,
-                                   bool remove_adjacent_pairs)
-    : robot_(robot), data_(robot.model()) {
+                                   bool remove_adjacent_pairs,
+                                   double clearance_margin)
+    : robot_(robot), data_(robot.model()), clearance_margin_(clearance_margin) {
     std::vector<std::string> dirs = package_dirs;
     if (dirs.empty()) {
         try {
@@ -92,6 +93,13 @@ void CollisionChecker::load_srdf(const std::string& srdf_path) {
     pinocchio::srdf::removeCollisionPairs(robot_.model(), geom_model_,
                                           srdf_path, /*verbose=*/false);
     rebuild_geom_data_();
+}
+
+void CollisionChecker::set_clearance_margin(double margin) {
+    clearance_margin_ = margin;
+    for (auto& creq : geom_data_.collisionRequests) {
+        creq.security_margin = margin;
+    }
 }
 
 void CollisionChecker::add_collision_pair(std::size_t first,
@@ -222,6 +230,47 @@ std::size_t CollisionChecker::add_geometry_object_(
 
     rebuild_geom_data_();
     return new_id;
+}
+
+std::size_t CollisionChecker::add_obstacle(
+    const std::string& name, const std::string& kind,
+    const std::vector<double>& p, const Eigen::Matrix4d& world_pose) {
+    auto need = [&](std::size_t n) {
+        if (p.size() != n)
+            throw std::invalid_argument(
+                "add_obstacle('" + kind + "'): expected " + std::to_string(n) +
+                " params, got " + std::to_string(p.size()));
+    };
+    std::shared_ptr<pinokin_fcl::CollisionGeometry> shape;
+    if (kind == "box") {
+        need(3);
+        shape = make_shape_ptr<pinokin_fcl::Box>(p[0], p[1], p[2]);
+    } else if (kind == "sphere") {
+        need(1);
+        shape = make_shape_ptr<pinokin_fcl::Sphere>(p[0]);
+    } else if (kind == "cylinder") {
+        need(2);
+        shape = make_shape_ptr<pinokin_fcl::Cylinder>(p[0], p[1]);
+    } else if (kind == "capsule") {
+        need(2);
+        shape = make_shape_ptr<pinokin_fcl::Capsule>(p[0], p[1]);
+    } else if (kind == "cone") {
+        need(2);
+        shape = make_shape_ptr<pinokin_fcl::Cone>(p[0], p[1]);
+    } else if (kind == "ellipsoid") {
+        need(3);
+        shape = make_shape_ptr<pinokin_fcl::Ellipsoid>(p[0], p[1], p[2]);
+    } else if (kind == "plane") {
+        need(4);
+        shape = make_shape_ptr<pinokin_fcl::Halfspace>(
+            Eigen::Vector3d(p[0], p[1], p[2]), p[3]);
+    } else {
+        throw std::invalid_argument("add_obstacle: unknown kind '" + kind + "'");
+    }
+    pinocchio::GeometryObject obj(name, pinocchio::JointIndex(0),
+                                  pinocchio::FrameIndex(0),
+                                  se3_from_matrix4(world_pose), shape);
+    return add_geometry_object_(std::move(obj), GeomKind::World);
 }
 
 std::size_t CollisionChecker::add_obstacle_box(
@@ -510,6 +559,7 @@ void CollisionChecker::rebuild_geom_data_() {
     for (auto& creq : geom_data_.collisionRequests) {
         creq.gjk_initial_guess = pinokin_fcl::GJKInitialGuess::DefaultGuess;
         creq.enable_cached_gjk_guess = false;
+        creq.security_margin = clearance_margin_;
     }
     for (auto& dreq : geom_data_.distanceRequests) {
         dreq.gjk_initial_guess = pinokin_fcl::GJKInitialGuess::DefaultGuess;

@@ -37,11 +37,17 @@ public:
                      const std::string& urdf_path,
                      const std::vector<std::string>& package_dirs = {},
                      bool add_all_pairs = true,
-                     bool remove_adjacent_pairs = true);
+                     bool remove_adjacent_pairs = true,
+                     double clearance_margin = 0.0);
 
     void load_srdf(const std::string& srdf_path);
     void add_collision_pair(std::size_t first, std::size_t second);
     void remove_collision_pair(std::size_t first, std::size_t second);
+
+    // Fixed clearance: geometry within this distance counts as colliding
+    // (coal CollisionRequest.security_margin), applied to every pair.
+    void set_clearance_margin(double margin);
+    double clearance_margin() const { return clearance_margin_; }
 
     // Fast boolean check, early-exits on first colliding pair.
     bool in_collision(const Eigen::VectorXd& q) const;
@@ -69,6 +75,16 @@ public:
     int check_path(const PathMatrix& q_path) const;
 
     // ----- Runtime geometry: world obstacles (parented to universe) ----
+    // Generic obstacle add — mirrors coal's shape ctors. kind ∈ {box, sphere,
+    // cylinder, capsule, cone, ellipsoid, plane}; params interpreted per kind
+    // (box: full x,y,z; sphere: r; cylinder/capsule/cone: r,length;
+    // ellipsoid: rx,ry,rz; plane: nx,ny,nz,offset → Halfspace). Mesh has its
+    // own loader-based method below.
+    std::size_t add_obstacle(const std::string& name,
+                             const std::string& kind,
+                             const std::vector<double>& params,
+                             const Eigen::Matrix4d& world_pose);
+
     std::size_t add_obstacle_box(const std::string& name,
                                  const Eigen::Vector3d& half_extents,
                                  const Eigen::Matrix4d& world_pose);
@@ -162,6 +178,9 @@ private:
     mutable pinocchio::GeometryData geom_data_;
     // Owned FK scratch for queries — see class comment (not the Robot's Data).
     mutable pinocchio::Data data_;
+
+    // Fixed clearance applied to every collision pair's security_margin.
+    double clearance_margin_ = 0.0;
 
     // Names -> handle for runtime-added geometry (gripper, payload,
     // world obstacles). URDF-loaded link geometry names also live here.
