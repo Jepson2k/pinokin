@@ -80,7 +80,7 @@ CollisionChecker::CollisionChecker(const Robot& robot,
     if (add_all_pairs) {
         geom_model_.addAllCollisionPairs();
         if (remove_adjacent_pairs) {
-            populate_default_pairs(true);
+            populate_default_pairs();
         }
     }
 
@@ -530,8 +530,7 @@ bool CollisionChecker::is_adjacent_joint_(pinocchio::JointIndex j1,
     return false;
 }
 
-void CollisionChecker::populate_default_pairs(bool remove_adjacent_pairs) {
-    if (!remove_adjacent_pairs) return;
+void CollisionChecker::populate_default_pairs() {
     const auto& objects = geom_model_.geometryObjects;
     std::vector<pinocchio::CollisionPair> to_remove;
     to_remove.reserve(geom_model_.collisionPairs.size());

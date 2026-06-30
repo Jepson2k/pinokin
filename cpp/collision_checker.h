@@ -159,7 +159,7 @@ public:
 private:
     enum class GeomKind { Link, World, Attached };
 
-    void populate_default_pairs(bool remove_adjacent_pairs);
+    void populate_default_pairs();
     void rebuild_geom_data_();
     void rebuild_name_index_();
 
