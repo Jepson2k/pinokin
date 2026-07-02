@@ -174,8 +174,8 @@ bool CollisionChecker::check_segment(const Eigen::VectorXd& q0,
 int CollisionChecker::check_path(const PathMatrix& q_path) const {
     const Eigen::Index n = q_path.rows();
     for (Eigen::Index i = 0; i < n; ++i) {
-        Eigen::VectorXd qi = q_path.row(i).transpose();
-        if (in_collision(qi)) return static_cast<int>(i);
+        seg_q_ = q_path.row(i).transpose();
+        if (in_collision(seg_q_)) return static_cast<int>(i);
     }
     return -1;
 }

@@ -190,7 +190,7 @@ private:
     // policy when something new is added. Indexed by GeometryID.
     std::vector<GeomKind> kinds_;
 
-    // Buffer reused by check_segment.
+    // Buffer reused by check_segment and check_path.
     mutable Eigen::VectorXd seg_q_;
 };
 
