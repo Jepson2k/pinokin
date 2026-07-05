@@ -1,5 +1,6 @@
 #pragma once
 
+#include <optional>
 #include <string>
 #include <vector>
 #include <utility>
@@ -45,7 +46,8 @@ public:
     void remove_collision_pair(std::size_t first, std::size_t second);
 
     // Fixed clearance: geometry within this distance counts as colliding
-    // (coal CollisionRequest.security_margin), applied to every pair.
+    // (coal CollisionRequest.security_margin), applied to every pair that
+    // has no per-obstacle margin override.
     void set_clearance_margin(double margin);
     double clearance_margin() const { return clearance_margin_; }
 
@@ -79,11 +81,13 @@ public:
     // cylinder, capsule, cone, ellipsoid, plane}; params interpreted per kind
     // (box: full x,y,z; sphere: r; cylinder/capsule/cone: r,length;
     // ellipsoid: rx,ry,rz; plane: nx,ny,nz,offset → Halfspace). Mesh has its
-    // own loader-based method below.
+    // own loader-based method below. margin overrides the global clearance
+    // for every pair this obstacle participates in.
     std::size_t add_obstacle(const std::string& name,
                              const std::string& kind,
                              const std::vector<double>& params,
-                             const Eigen::Matrix4d& world_pose);
+                             const Eigen::Matrix4d& world_pose,
+                             std::optional<double> margin = std::nullopt);
 
     std::size_t add_obstacle_box(const std::string& name,
                                  const Eigen::Vector3d& half_extents,
@@ -153,6 +157,12 @@ public:
     std::vector<std::string> geometry_names() const;
     bool has_geometry(const std::string& name) const;
 
+    // (geometry name, display name) for every geometry: URDF link geometry
+    // reports its parent link's name; runtime-added geometry keeps its
+    // user-supplied name. Lets callers report colliding pairs in URDF-link
+    // vocabulary instead of internal geometry identifiers.
+    std::vector<std::pair<std::string, std::string>> geometry_link_names() const;
+
     const pinocchio::GeometryModel& geom_model() const { return geom_model_; }
     pinocchio::GeometryData& geom_data() const { return geom_data_; }
 
@@ -162,6 +172,9 @@ private:
     void populate_default_pairs();
     void rebuild_geom_data_();
     void rebuild_name_index_();
+    // Re-derive every pair's security_margin from the global clearance and
+    // the per-geometry overrides.
+    void apply_margins_();
 
     // Append a GeometryObject and add the appropriate pairs based on kind.
     std::size_t add_geometry_object_(pinocchio::GeometryObject obj,
@@ -189,6 +202,10 @@ private:
     // Tracks how each geometry was added so we can apply the right pair
     // policy when something new is added. Indexed by GeometryID.
     std::vector<GeomKind> kinds_;
+
+    // Per-geometry clearance override (NaN = none). Indexed by GeometryID,
+    // kept parallel to kinds_.
+    std::vector<double> geom_margins_;
 
     // Buffer reused by check_segment and check_path.
     mutable Eigen::VectorXd seg_q_;

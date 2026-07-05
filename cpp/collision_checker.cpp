@@ -11,7 +11,9 @@
 #include <pinocchio/collision/distance.hpp>
 
 #include <algorithm>
+#include <cmath>
 #include <filesystem>
+#include <limits>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -36,6 +38,9 @@ namespace pinokin_fcl = hpp::fcl;
 namespace pinokin {
 
 namespace {
+
+// "No per-geometry margin override" sentinel for geom_margins_.
+constexpr double kNoMargin = std::numeric_limits<double>::quiet_NaN();
 
 pinocchio::SE3 se3_from_matrix4(const Eigen::Matrix4d& T) {
     return pinocchio::SE3(T.template block<3, 3>(0, 0),
@@ -76,6 +81,7 @@ CollisionChecker::CollisionChecker(const Robot& robot,
                                pinocchio::COLLISION, geom_model_, dirs);
 
     kinds_.assign(geom_model_.geometryObjects.size(), GeomKind::Link);
+    geom_margins_.assign(geom_model_.geometryObjects.size(), kNoMargin);
 
     if (add_all_pairs) {
         geom_model_.addAllCollisionPairs();
@@ -97,9 +103,7 @@ void CollisionChecker::load_srdf(const std::string& srdf_path) {
 
 void CollisionChecker::set_clearance_margin(double margin) {
     clearance_margin_ = margin;
-    for (auto& creq : geom_data_.collisionRequests) {
-        creq.security_margin = margin;
-    }
+    apply_margins_();
 }
 
 void CollisionChecker::add_collision_pair(std::size_t first,
@@ -193,6 +197,7 @@ std::size_t CollisionChecker::add_geometry_object_(
     }
     const std::size_t new_id = geom_model_.addGeometryObject(obj);
     kinds_.push_back(kind);
+    geom_margins_.push_back(kNoMargin);
     name_to_handle_[obj.name] = new_id;
 
     // Apply pair policy.
@@ -234,7 +239,8 @@ std::size_t CollisionChecker::add_geometry_object_(
 
 std::size_t CollisionChecker::add_obstacle(
     const std::string& name, const std::string& kind,
-    const std::vector<double>& p, const Eigen::Matrix4d& world_pose) {
+    const std::vector<double>& p, const Eigen::Matrix4d& world_pose,
+    std::optional<double> margin) {
     auto need = [&](std::size_t n) {
         if (p.size() != n)
             throw std::invalid_argument(
@@ -270,7 +276,13 @@ std::size_t CollisionChecker::add_obstacle(
     pinocchio::GeometryObject obj(name, pinocchio::JointIndex(0),
                                   pinocchio::FrameIndex(0),
                                   se3_from_matrix4(world_pose), shape);
-    return add_geometry_object_(std::move(obj), GeomKind::World);
+    const std::size_t handle =
+        add_geometry_object_(std::move(obj), GeomKind::World);
+    if (margin) {
+        geom_margins_[handle] = *margin;
+        apply_margins_();
+    }
+    return handle;
 }
 
 std::size_t CollisionChecker::add_obstacle_box(
@@ -438,6 +450,7 @@ void CollisionChecker::remove_geometry(std::size_t handle) {
     const std::string name = geom_model_.geometryObjects[handle].name;
     geom_model_.removeGeometryObject(name);
     kinds_.erase(kinds_.begin() + handle);
+    geom_margins_.erase(geom_margins_.begin() + handle);
     rebuild_geom_data_();
     rebuild_name_index_();
 }
@@ -517,6 +530,23 @@ bool CollisionChecker::has_geometry(const std::string& name) const {
     return name_to_handle_.find(name) != name_to_handle_.end();
 }
 
+std::vector<std::pair<std::string, std::string>>
+CollisionChecker::geometry_link_names() const {
+    std::vector<std::pair<std::string, std::string>> out;
+    const auto& model = robot_.model();
+    out.reserve(geom_model_.geometryObjects.size());
+    for (std::size_t i = 0; i < geom_model_.geometryObjects.size(); ++i) {
+        const auto& obj = geom_model_.geometryObjects[i];
+        std::string display = obj.name;
+        if (kinds_[i] == GeomKind::Link &&
+            obj.parentFrame < model.frames.size()) {
+            display = model.frames[obj.parentFrame].name;
+        }
+        out.emplace_back(obj.name, display);
+    }
+    return out;
+}
+
 // ---------------------------------------------------------------------------
 // Internals
 // ---------------------------------------------------------------------------
@@ -558,11 +588,30 @@ void CollisionChecker::rebuild_geom_data_() {
     for (auto& creq : geom_data_.collisionRequests) {
         creq.gjk_initial_guess = pinokin_fcl::GJKInitialGuess::DefaultGuess;
         creq.enable_cached_gjk_guess = false;
-        creq.security_margin = clearance_margin_;
     }
     for (auto& dreq : geom_data_.distanceRequests) {
         dreq.gjk_initial_guess = pinokin_fcl::GJKInitialGuess::DefaultGuess;
         dreq.enable_cached_gjk_guess = false;
+    }
+    apply_margins_();
+}
+
+void CollisionChecker::apply_margins_() {
+    // A pair's margin is the override of whichever member carries one (world
+    // obstacles never pair with each other, so at most one member does),
+    // falling back to the global clearance.
+    const std::size_t n_pairs = geom_model_.collisionPairs.size();
+    for (std::size_t k = 0; k < n_pairs; ++k) {
+        const auto& cp = geom_model_.collisionPairs[k];
+        double m = clearance_margin_;
+        if (cp.first < geom_margins_.size() &&
+            !std::isnan(geom_margins_[cp.first])) {
+            m = geom_margins_[cp.first];
+        } else if (cp.second < geom_margins_.size() &&
+                   !std::isnan(geom_margins_[cp.second])) {
+            m = geom_margins_[cp.second];
+        }
+        geom_data_.collisionRequests[k].security_margin = m;
     }
 }
 
@@ -575,6 +624,9 @@ void CollisionChecker::rebuild_name_index_() {
     // kinds_ may have been resized by URDF load; ensure size matches.
     if (kinds_.size() != geom_model_.geometryObjects.size()) {
         kinds_.assign(geom_model_.geometryObjects.size(), GeomKind::Link);
+    }
+    if (geom_margins_.size() != geom_model_.geometryObjects.size()) {
+        geom_margins_.assign(geom_model_.geometryObjects.size(), kNoMargin);
     }
 }
 
