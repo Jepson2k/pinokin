@@ -168,3 +168,33 @@ def test_release_payload_to_world(collision_robot, fresh_checker):
     world_pose = fresh_checker.geometry_world_pose("payload")
     fresh_checker.reparent_geometry_by_name("payload", "universe", world_pose)
     assert fresh_checker.in_collision(q_home) is False
+
+
+def test_add_obstacle_margin_overrides_clearance(collision_robot, fresh_checker):
+    """A per-obstacle margin trips collision at standoff, survives a global
+    clearance re-apply, and clears on removal."""
+    q = np.zeros(collision_robot.nq)
+    pose = np.eye(4)
+    pose[2, 3] = 1.0  # well above the two-link chain — clear at contact
+    fresh_checker.add_obstacle("far", "sphere", [0.05], pose)
+    assert fresh_checker.in_collision(q) is False
+
+    fresh_checker.remove_geometry_by_name("far")
+    fresh_checker.add_obstacle("far", "sphere", [0.05], pose, margin=5.0)
+    assert fresh_checker.in_collision(q) is True
+
+    # Re-applying the global clearance must not clobber the override.
+    fresh_checker.set_clearance_margin(0.0)
+    assert fresh_checker.in_collision(q) is True
+
+    fresh_checker.remove_geometry_by_name("far")
+    assert fresh_checker.in_collision(q) is False
+
+
+def test_geometry_link_names_maps_urdf_geometry_to_links(fresh_checker):
+    """URDF link geometry reports its parent link's name; runtime obstacles
+    keep their user-supplied names."""
+    fresh_checker.add_obstacle("shape:zone", "box", [0.1, 0.1, 0.1], np.eye(4))
+    names = dict(fresh_checker.geometry_link_names)
+    assert names["shape:zone"] == "shape:zone"
+    assert {"base_link", "L1", "L2"} <= set(names.values())

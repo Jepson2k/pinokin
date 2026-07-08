@@ -106,12 +106,13 @@ NB_MODULE(_core, m) {
 
     nb::class_<CollisionChecker>(m, "CollisionChecker")
         .def(nb::init<const Robot&, const std::string&,
-                       const std::vector<std::string>&, bool, bool>(),
+                       const std::vector<std::string>&, bool, bool, double>(),
              nb::arg("robot"),
              nb::arg("urdf_path"),
              nb::arg("package_dirs") = std::vector<std::string>{},
              nb::arg("add_all_pairs") = true,
              nb::arg("remove_adjacent_pairs") = true,
+             nb::arg("clearance_margin") = 0.0,
              nb::keep_alive<1, 2>())
         .def("load_srdf", &CollisionChecker::load_srdf, nb::arg("srdf_path"))
         .def("add_collision_pair", &CollisionChecker::add_collision_pair,
@@ -125,6 +126,14 @@ NB_MODULE(_core, m) {
              nb::arg("q0"), nb::arg("q1"), nb::arg("n_steps"),
              nb::arg("include_endpoints") = true)
         .def("check_path", &CollisionChecker::check_path, nb::arg("q_path"))
+        .def("set_clearance_margin", &CollisionChecker::set_clearance_margin,
+             nb::arg("margin"))
+        .def_prop_ro("clearance_margin", &CollisionChecker::clearance_margin)
+        .def("add_obstacle", &CollisionChecker::add_obstacle,
+             nb::arg("name"), nb::arg("kind"), nb::arg("params"),
+             nb::arg("world_pose"), nb::arg("margin") = nb::none(),
+             "margin overrides the global clearance for every pair this "
+             "obstacle participates in (metres); None -> global clearance.")
         .def("add_obstacle_box", &CollisionChecker::add_obstacle_box,
              nb::arg("name"), nb::arg("half_extents"), nb::arg("world_pose"))
         .def("add_obstacle_sphere", &CollisionChecker::add_obstacle_sphere,
@@ -167,5 +176,10 @@ NB_MODULE(_core, m) {
                      &CollisionChecker::num_geometry_objects)
         .def_prop_ro("geometry_names",
                      &CollisionChecker::geometry_names)
+        .def_prop_ro("geometry_link_names",
+                     &CollisionChecker::geometry_link_names,
+                     "(geometry name, display name) pairs: URDF link geometry "
+                     "reports its parent link's name; runtime-added geometry "
+                     "keeps its user-supplied name.")
         .def("has_geometry", &CollisionChecker::has_geometry, nb::arg("name"));
 }

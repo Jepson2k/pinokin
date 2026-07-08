@@ -1,5 +1,6 @@
 #pragma once
 
+#include <optional>
 #include <string>
 #include <vector>
 #include <utility>
@@ -37,11 +38,18 @@ public:
                      const std::string& urdf_path,
                      const std::vector<std::string>& package_dirs = {},
                      bool add_all_pairs = true,
-                     bool remove_adjacent_pairs = true);
+                     bool remove_adjacent_pairs = true,
+                     double clearance_margin = 0.0);
 
     void load_srdf(const std::string& srdf_path);
     void add_collision_pair(std::size_t first, std::size_t second);
     void remove_collision_pair(std::size_t first, std::size_t second);
+
+    // Fixed clearance: geometry within this distance counts as colliding
+    // (coal CollisionRequest.security_margin), applied to every pair that
+    // has no per-obstacle margin override.
+    void set_clearance_margin(double margin);
+    double clearance_margin() const { return clearance_margin_; }
 
     // Fast boolean check, early-exits on first colliding pair.
     bool in_collision(const Eigen::VectorXd& q) const;
@@ -69,6 +77,18 @@ public:
     int check_path(const PathMatrix& q_path) const;
 
     // ----- Runtime geometry: world obstacles (parented to universe) ----
+    // Generic obstacle add — mirrors coal's shape ctors. kind ∈ {box, sphere,
+    // cylinder, capsule, cone, ellipsoid, plane}; params interpreted per kind
+    // (box: full x,y,z; sphere: r; cylinder/capsule/cone: r,length;
+    // ellipsoid: rx,ry,rz; plane: nx,ny,nz,offset → Halfspace). Mesh has its
+    // own loader-based method below. margin overrides the global clearance
+    // for every pair this obstacle participates in.
+    std::size_t add_obstacle(const std::string& name,
+                             const std::string& kind,
+                             const std::vector<double>& params,
+                             const Eigen::Matrix4d& world_pose,
+                             std::optional<double> margin = std::nullopt);
+
     std::size_t add_obstacle_box(const std::string& name,
                                  const Eigen::Vector3d& half_extents,
                                  const Eigen::Matrix4d& world_pose);
@@ -137,15 +157,24 @@ public:
     std::vector<std::string> geometry_names() const;
     bool has_geometry(const std::string& name) const;
 
+    // (geometry name, display name) for every geometry: URDF link geometry
+    // reports its parent link's name; runtime-added geometry keeps its
+    // user-supplied name. Lets callers report colliding pairs in URDF-link
+    // vocabulary instead of internal geometry identifiers.
+    std::vector<std::pair<std::string, std::string>> geometry_link_names() const;
+
     const pinocchio::GeometryModel& geom_model() const { return geom_model_; }
     pinocchio::GeometryData& geom_data() const { return geom_data_; }
 
 private:
     enum class GeomKind { Link, World, Attached };
 
-    void populate_default_pairs(bool remove_adjacent_pairs);
+    void populate_default_pairs();
     void rebuild_geom_data_();
     void rebuild_name_index_();
+    // Re-derive every pair's security_margin from the global clearance and
+    // the per-geometry overrides.
+    void apply_margins_();
 
     // Append a GeometryObject and add the appropriate pairs based on kind.
     std::size_t add_geometry_object_(pinocchio::GeometryObject obj,
@@ -163,6 +192,9 @@ private:
     // Owned FK scratch for queries — see class comment (not the Robot's Data).
     mutable pinocchio::Data data_;
 
+    // Fixed clearance applied to every collision pair's security_margin.
+    double clearance_margin_ = 0.0;
+
     // Names -> handle for runtime-added geometry (gripper, payload,
     // world obstacles). URDF-loaded link geometry names also live here.
     std::unordered_map<std::string, std::size_t> name_to_handle_;
@@ -171,7 +203,11 @@ private:
     // policy when something new is added. Indexed by GeometryID.
     std::vector<GeomKind> kinds_;
 
-    // Buffer reused by check_segment.
+    // Per-geometry clearance override (NaN = none). Indexed by GeometryID,
+    // kept parallel to kinds_.
+    std::vector<double> geom_margins_;
+
+    // Buffer reused by check_segment and check_path.
     mutable Eigen::VectorXd seg_q_;
 };
 
