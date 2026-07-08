@@ -1,0 +1,59 @@
+<?xml version="1.0"?>
+<!--
+  Tiny two-link arm used by tests/test_collision.py.
+  Boxes only - no external mesh files needed.
+
+  Geometry:
+    base_link: a thin pedestal box (collision only).
+    L1: a thin link rotating about Z, offset from base.
+    L2: a child link of L1 that can swing into the base when q1 > ~pi/2.
+
+  At q = [0, 0]: arm sticks straight up, no contact.
+  At q = [0, pi]: L2 folds back through L1 and base => self-collision.
+-->
+<robot name="collision_two_link">
+
+  <link name="base_link">
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.30 0.30 0.10"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <link name="L1">
+    <collision>
+      <origin xyz="0 0 0.10" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.05 0.05 0.30"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <joint name="J1" type="revolute">
+    <parent link="base_link"/>
+    <child link="L1"/>
+    <origin xyz="0 0 0.10" rpy="0 0 0"/>
+    <axis xyz="1 0 0"/>
+    <limit lower="-3.14159" upper="3.14159" effort="100" velocity="3"/>
+  </joint>
+
+  <link name="L2">
+    <collision>
+      <origin xyz="0 0 0.15" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.05 0.05 0.50"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <joint name="J2" type="revolute">
+    <parent link="L1"/>
+    <child link="L2"/>
+    <origin xyz="0 0 0.30" rpy="0 0 0"/>
+    <axis xyz="1 0 0"/>
+    <limit lower="-3.14159" upper="3.14159" effort="100" velocity="3"/>
+  </joint>
+
+</robot>

@@ -2,16 +2,18 @@
 #include <nanobind/eigen/dense.h>
 #include <nanobind/stl/string.h>
 #include <nanobind/stl/vector.h>
+#include <nanobind/stl/pair.h>
 #include <nanobind/stl/optional.h>
 
 #include "robot.h"
 #include "ik_solver.h"
+#include "collision_checker.h"
 
 namespace nb = nanobind;
 using namespace pinokin;
 
 NB_MODULE(_core, m) {
-    m.doc() = "pinokin: FK, Jacobians, and IK for URDF robots via Pinocchio";
+    m.doc() = "pinokin: FK, Jacobians, IK, and collision for URDF robots via Pinocchio";
 
     nb::class_<Robot>(m, "Robot")
         .def(nb::init<const std::string&, const std::string&>(),
@@ -80,7 +82,7 @@ NB_MODULE(_core, m) {
              nb::arg("max_iter") = 30,
              nb::arg("max_restarts") = 100,
              nb::arg("enforce_limits") = true,
-             nb::keep_alive<1, 2>())  // IKSolver refs Robot
+             nb::keep_alive<1, 2>())
         .def("solve",
              [](IKSolver& s, const Eigen::Matrix4d& Tep,
                 nb::object q0_obj) -> bool {
@@ -101,4 +103,83 @@ NB_MODULE(_core, m) {
         .def_prop_ro("residual", &IKSolver::residual)
         .def_prop_ro("iterations", &IKSolver::iterations)
         .def_prop_ro("restarts", &IKSolver::restarts);
+
+    nb::class_<CollisionChecker>(m, "CollisionChecker")
+        .def(nb::init<const Robot&, const std::string&,
+                       const std::vector<std::string>&, bool, bool, double>(),
+             nb::arg("robot"),
+             nb::arg("urdf_path"),
+             nb::arg("package_dirs") = std::vector<std::string>{},
+             nb::arg("add_all_pairs") = true,
+             nb::arg("remove_adjacent_pairs") = true,
+             nb::arg("clearance_margin") = 0.0,
+             nb::keep_alive<1, 2>())
+        .def("load_srdf", &CollisionChecker::load_srdf, nb::arg("srdf_path"))
+        .def("add_collision_pair", &CollisionChecker::add_collision_pair,
+             nb::arg("first"), nb::arg("second"))
+        .def("remove_collision_pair", &CollisionChecker::remove_collision_pair,
+             nb::arg("first"), nb::arg("second"))
+        .def("in_collision", &CollisionChecker::in_collision, nb::arg("q"))
+        .def("colliding_pairs", &CollisionChecker::colliding_pairs, nb::arg("q"))
+        .def("min_distance", &CollisionChecker::min_distance, nb::arg("q"))
+        .def("check_segment", &CollisionChecker::check_segment,
+             nb::arg("q0"), nb::arg("q1"), nb::arg("n_steps"),
+             nb::arg("include_endpoints") = true)
+        .def("check_path", &CollisionChecker::check_path, nb::arg("q_path"))
+        .def("set_clearance_margin", &CollisionChecker::set_clearance_margin,
+             nb::arg("margin"))
+        .def_prop_ro("clearance_margin", &CollisionChecker::clearance_margin)
+        .def("add_obstacle", &CollisionChecker::add_obstacle,
+             nb::arg("name"), nb::arg("kind"), nb::arg("params"),
+             nb::arg("world_pose"), nb::arg("margin") = nb::none(),
+             "margin overrides the global clearance for every pair this "
+             "obstacle participates in (metres); None -> global clearance.")
+        .def("add_obstacle_box", &CollisionChecker::add_obstacle_box,
+             nb::arg("name"), nb::arg("half_extents"), nb::arg("world_pose"))
+        .def("add_obstacle_sphere", &CollisionChecker::add_obstacle_sphere,
+             nb::arg("name"), nb::arg("radius"), nb::arg("world_pose"))
+        .def("add_obstacle_cylinder", &CollisionChecker::add_obstacle_cylinder,
+             nb::arg("name"), nb::arg("radius"), nb::arg("length"),
+             nb::arg("world_pose"))
+        .def("add_obstacle_mesh", &CollisionChecker::add_obstacle_mesh,
+             nb::arg("name"), nb::arg("mesh_path"), nb::arg("world_pose"),
+             nb::arg("mesh_scale") = Eigen::Vector3d::Ones())
+        .def("attach_box_to_frame", &CollisionChecker::attach_box_to_frame,
+             nb::arg("name"), nb::arg("half_extents"),
+             nb::arg("parent_frame"), nb::arg("placement"))
+        .def("attach_sphere_to_frame", &CollisionChecker::attach_sphere_to_frame,
+             nb::arg("name"), nb::arg("radius"),
+             nb::arg("parent_frame"), nb::arg("placement"))
+        .def("attach_cylinder_to_frame", &CollisionChecker::attach_cylinder_to_frame,
+             nb::arg("name"), nb::arg("radius"), nb::arg("length"),
+             nb::arg("parent_frame"), nb::arg("placement"))
+        .def("attach_mesh_to_frame", &CollisionChecker::attach_mesh_to_frame,
+             nb::arg("name"), nb::arg("mesh_path"),
+             nb::arg("parent_frame"), nb::arg("placement"),
+             nb::arg("mesh_scale") = Eigen::Vector3d::Ones())
+        .def("set_geometry_pose_by_name",
+             &CollisionChecker::set_geometry_pose_by_name,
+             nb::arg("name"), nb::arg("pose"))
+        .def("geometry_world_pose",
+             &CollisionChecker::geometry_world_pose, nb::arg("name"))
+        .def("remove_geometry_by_name",
+             &CollisionChecker::remove_geometry_by_name, nb::arg("name"))
+        .def("reparent_geometry_by_name",
+             &CollisionChecker::reparent_geometry_by_name,
+             nb::arg("name"), nb::arg("new_parent_frame"),
+             nb::arg("new_placement"))
+        .def("update_placements", &CollisionChecker::update_placements,
+             nb::arg("q"))
+        .def_prop_ro("num_collision_pairs",
+                     &CollisionChecker::num_collision_pairs)
+        .def_prop_ro("num_geometry_objects",
+                     &CollisionChecker::num_geometry_objects)
+        .def_prop_ro("geometry_names",
+                     &CollisionChecker::geometry_names)
+        .def_prop_ro("geometry_link_names",
+                     &CollisionChecker::geometry_link_names,
+                     "(geometry name, display name) pairs: URDF link geometry "
+                     "reports its parent link's name; runtime-added geometry "
+                     "keeps its user-supplied name.")
+        .def("has_geometry", &CollisionChecker::has_geometry, nb::arg("name"));
 }

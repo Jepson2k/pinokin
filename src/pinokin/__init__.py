@@ -1,4 +1,11 @@
-from pinokin._core import BatchResult, Damping, IKSolver, Method, Robot
+from pinokin._core import (
+    BatchResult,
+    CollisionChecker,
+    Damping,
+    IKSolver,
+    Method,
+    Robot,
+)
 from pinokin.numba_se3 import (
     _compute_V_inv_matrix,
     # Internal V matrix functions (exported for warmup)
@@ -38,6 +45,7 @@ __all__ = [
     "Method",
     "Damping",
     "BatchResult",
+    "CollisionChecker",
     "arrays_equal_6",
     "arrays_equal_n",
     "so3_from_rpy",
