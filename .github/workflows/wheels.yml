@@ -13,14 +13,17 @@ jobs:
       fail-fast: false
       matrix:
         # os + python cross-product; include adds arch metadata per os
-        os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest, windows-latest]
+        # macos pinned: the macos-latest pool is mixed macOS 15/26 mid-rollout, so
+        # unpinned builds stamp whichever host version they land on and the
+        # resulting macosx_26_0 wheels won't install on macOS 15 runners/users
+        os: [ubuntu-latest, ubuntu-24.04-arm, macos-15, windows-latest]
         python: ["3.11", "3.12", "3.13", "3.14"]
         include:
           - os: ubuntu-latest
             arch: x86_64
           - os: ubuntu-24.04-arm
             arch: aarch64
-          - os: macos-latest
+          - os: macos-15
             arch: arm64
           - os: windows-latest
             arch: AMD64
