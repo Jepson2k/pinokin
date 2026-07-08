@@ -27,13 +27,6 @@ def arrays_equal_6(a: np.ndarray, b: np.ndarray) -> bool:
     """Fast 6-element array comparison.
 
     Avoids np.array_equal dispatch overhead for small fixed-size arrays.
-
-    Args:
-        a: First 6-element array
-        b: Second 6-element array
-
-    Returns:
-        True if all elements are equal
     """
     for i in range(6):
         if a[i] != b[i]:
@@ -47,13 +40,6 @@ def arrays_equal_n(a: np.ndarray, b: np.ndarray) -> bool:
 
     Avoids np.array_equal dispatch overhead for small arrays.
     Both arrays must have the same length.
-
-    Args:
-        a: First array
-        b: Second array (same length as a)
-
-    Returns:
-        True if all elements are equal
     """
     for i in range(len(a)):
         if a[i] != b[i]:
@@ -67,12 +53,6 @@ def so3_from_rpy(roll: float, pitch: float, yaw: float, out: np.ndarray) -> None
 
     Computes R = Rx(roll) @ Ry(pitch) @ Rz(yaw).
     Matches scipy.spatial.transform.Rotation.from_euler('XYZ', ...).
-
-    Args:
-        roll: Rotation about X axis (radians)
-        pitch: Rotation about Y axis (radians)
-        yaw: Rotation about Z axis (radians)
-        out: 3x3 output array (modified in place)
     """
     cr = np.cos(roll)
     sr = np.sin(roll)
@@ -98,10 +78,7 @@ def so3_rpy(R: np.ndarray, out: np.ndarray) -> None:
 
     Inverse of so3_from_rpy. For R = Rx(roll) @ Ry(pitch) @ Rz(yaw).
     Matches scipy.spatial.transform.Rotation.as_euler('XYZ', ...).
-
-    Args:
-        R: 3x3 rotation matrix
-        out: 3-element output array [roll, pitch, yaw] in radians
+    Output is [roll, pitch, yaw] in radians.
     """
     # Clamp to avoid numerical issues with arcsin
     sp = R[0, 2]
@@ -109,9 +86,9 @@ def so3_rpy(R: np.ndarray, out: np.ndarray) -> None:
         sp = 1.0
     elif sp < -1.0:
         sp = -1.0
-    out[1] = np.arcsin(sp)  # pitch
-    out[0] = np.arctan2(-R[1, 2], R[2, 2])  # roll
-    out[2] = np.arctan2(-R[0, 1], R[0, 0])  # yaw
+    out[1] = np.arcsin(sp)
+    out[0] = np.arctan2(-R[1, 2], R[2, 2])
+    out[2] = np.arctan2(-R[0, 1], R[0, 0])
 
 
 @njit(cache=True)
@@ -128,11 +105,6 @@ def se3_from_rpy(
 
     Computes rotation as R = Rx(roll) @ Ry(pitch) @ Rz(yaw).
     Matches scipy.spatial.transform.Rotation.from_euler('XYZ', ...).
-
-    Args:
-        x, y, z: Translation components
-        roll, pitch, yaw: Rotation angles (radians, XYZ intrinsic)
-        out: 4x4 output array (modified in place)
     """
     cr = np.cos(roll)
     sr = np.sin(roll)
@@ -141,7 +113,6 @@ def se3_from_rpy(
     cy = np.cos(yaw)
     sy = np.sin(yaw)
 
-    # Rotation part
     out[0, 0] = cp * cy
     out[0, 1] = -cp * sy
     out[0, 2] = sp
@@ -152,12 +123,10 @@ def se3_from_rpy(
     out[2, 1] = cr * sp * sy + sr * cy
     out[2, 2] = cr * cp
 
-    # Translation part
     out[0, 3] = x
     out[1, 3] = y
     out[2, 3] = z
 
-    # Bottom row
     out[3, 0] = 0.0
     out[3, 1] = 0.0
     out[3, 2] = 0.0
@@ -170,10 +139,7 @@ def se3_rpy(T: np.ndarray, out: np.ndarray) -> None:
 
     Inverse of se3_from_rpy (rotation part only).
     Matches scipy.spatial.transform.Rotation.as_euler('XYZ', ...).
-
-    Args:
-        T: 4x4 SE3 matrix
-        out: 3-element output array [roll, pitch, yaw] in radians
+    Output is [roll, pitch, yaw] in radians.
     """
     # Clamp to avoid numerical issues with arcsin
     sp = T[0, 2]
@@ -181,9 +147,9 @@ def se3_rpy(T: np.ndarray, out: np.ndarray) -> None:
         sp = 1.0
     elif sp < -1.0:
         sp = -1.0
-    out[1] = np.arcsin(sp)  # pitch
-    out[0] = np.arctan2(-T[1, 2], T[2, 2])  # roll
-    out[2] = np.arctan2(-T[0, 1], T[0, 0])  # yaw
+    out[1] = np.arcsin(sp)
+    out[0] = np.arctan2(-T[1, 2], T[2, 2])
+    out[2] = np.arctan2(-T[0, 1], T[0, 0])
 
 
 # =============================================================================
@@ -266,14 +232,7 @@ def se3_copy(src: np.ndarray, dst: np.ndarray) -> None:
 
 @njit(cache=True)
 def se3_inverse(T: np.ndarray, out: np.ndarray) -> None:
-    """Compute inverse of SE3 transformation.
-
-    For SE3: T^-1 = [R^T | -R^T * t]
-
-    Args:
-        T: 4x4 SE3 matrix
-        out: 4x4 output array
-    """
+    """Compute inverse of SE3 transformation: T^-1 = [R^T | -R^T * t]."""
     # R^T (transpose of rotation)
     out[0, 0] = T[0, 0]
     out[0, 1] = T[1, 0]
@@ -293,7 +252,6 @@ def se3_inverse(T: np.ndarray, out: np.ndarray) -> None:
     out[1, 3] = -(out[1, 0] * tx + out[1, 1] * ty + out[1, 2] * tz)
     out[2, 3] = -(out[2, 0] * tx + out[2, 1] * ty + out[2, 2] * tz)
 
-    # Bottom row
     out[3, 0] = 0.0
     out[3, 1] = 0.0
     out[3, 2] = 0.0
@@ -307,12 +265,7 @@ def se3_inverse(T: np.ndarray, out: np.ndarray) -> None:
 
 @njit(cache=True)
 def so3_log(R: np.ndarray, out: np.ndarray) -> None:
-    """SO3 matrix logarithm (rotation matrix to axis-angle vector).
-
-    Args:
-        R: 3x3 rotation matrix
-        out: 3-element output array (axis-angle vector omega)
-    """
+    """SO3 matrix logarithm (rotation matrix to axis-angle vector omega)."""
     # Compute rotation angle from trace: trace(R) = 1 + 2*cos(theta)
     trace = R[0, 0] + R[1, 1] + R[2, 2]
     cos_theta = (trace - 1.0) / 2.0
@@ -375,10 +328,6 @@ def so3_exp(omega: np.ndarray, out: np.ndarray) -> None:
     """SO3 matrix exponential (axis-angle vector to rotation matrix).
 
     Uses Rodrigues' formula: R = I + sin(θ)/θ * [ω]× + (1-cos(θ))/θ² * [ω]×²
-
-    Args:
-        omega: 3-element axis-angle vector
-        out: 3x3 output rotation matrix
     """
     theta_sq = omega[0] * omega[0] + omega[1] * omega[1] + omega[2] * omega[2]
     theta = np.sqrt(theta_sq)
@@ -428,10 +377,6 @@ def _compute_V_matrix(omega: np.ndarray, V: np.ndarray) -> None:
     """Compute the V matrix for SE3 log/exp.
 
     V = I + (1-cos(θ))/θ² * [ω]× + (θ - sin(θ))/θ³ * [ω]×²
-
-    Args:
-        omega: 3-element axis-angle vector
-        V: 3x3 output matrix
     """
     theta_sq = omega[0] * omega[0] + omega[1] * omega[1] + omega[2] * omega[2]
     theta = np.sqrt(theta_sq)
@@ -477,10 +422,6 @@ def _compute_V_inv_matrix(omega: np.ndarray, V_inv: np.ndarray) -> None:
     """Compute the inverse V matrix for SE3 log.
 
     V^-1 = I - 0.5*[ω]× + (1/θ² - (1+cos(θ))/(2θ sin(θ))) * [ω]×²
-
-    Args:
-        omega: 3-element axis-angle vector
-        V_inv: 3x3 output matrix
     """
     theta_sq = omega[0] * omega[0] + omega[1] * omega[1] + omega[2] * omega[2]
     theta = np.sqrt(theta_sq)
@@ -529,13 +470,9 @@ def _compute_V_inv_matrix(omega: np.ndarray, V_inv: np.ndarray) -> None:
 def se3_log(T: np.ndarray, out: np.ndarray) -> None:
     """SE3 matrix logarithm (SE3 to 6D twist vector).
 
-    The twist vector is [v, ω] where v is linear and ω is angular.
-
-    Args:
-        T: 4x4 SE3 matrix
-        out: 6-element output array [vx, vy, vz, ωx, ωy, ωz]
+    The twist vector is [v, ω] where v is linear and ω is angular,
+    output as [vx, vy, vz, ωx, ωy, ωz].
     """
-    # Extract rotation and compute omega
     omega = np.zeros(3, dtype=np.float64)
     R = np.zeros((3, 3), dtype=np.float64)
     for i in range(3):
@@ -562,12 +499,7 @@ def se3_log(T: np.ndarray, out: np.ndarray) -> None:
 
 @njit(cache=True)
 def se3_exp(twist: np.ndarray, out: np.ndarray) -> None:
-    """SE3 matrix exponential (6D twist to SE3).
-
-    Args:
-        twist: 6-element twist vector [vx, vy, vz, ωx, ωy, ωz]
-        out: 4x4 output SE3 matrix
-    """
+    """SE3 matrix exponential (6D twist [vx, vy, vz, ωx, ωy, ωz] to SE3)."""
     omega = np.zeros(3, dtype=np.float64)
     omega[0] = twist[3]
     omega[1] = twist[4]
@@ -593,7 +525,6 @@ def se3_exp(twist: np.ndarray, out: np.ndarray) -> None:
     out[1, 3] = V[1, 0] * vx + V[1, 1] * vy + V[1, 2] * vz
     out[2, 3] = V[2, 0] * vx + V[2, 1] * vy + V[2, 2] * vz
 
-    # Bottom row
     out[3, 0] = 0.0
     out[3, 1] = 0.0
     out[3, 2] = 0.0
@@ -604,51 +535,31 @@ def se3_exp(twist: np.ndarray, out: np.ndarray) -> None:
 def se3_interp(T1: np.ndarray, T2: np.ndarray, s: float, out: np.ndarray) -> None:
     """Interpolate between two SE3 transforms using Lie algebra.
 
-    Computes: T1 * exp(s * log(T1^-1 * T2))
-
-    Args:
-        T1: 4x4 start SE3 matrix
-        T2: 4x4 end SE3 matrix
-        s: Interpolation factor [0, 1]
-        out: 4x4 output SE3 matrix
+    Computes: T1 * exp(s * log(T1^-1 * T2)), with s the factor in [0, 1].
     """
-    # Compute T1^-1
     T1_inv = np.zeros((4, 4), dtype=np.float64)
     se3_inverse(T1, T1_inv)
 
-    # Compute delta = T1^-1 * T2
     delta = np.zeros((4, 4), dtype=np.float64)
     se3_mul(T1_inv, T2, delta)
 
-    # Compute log(delta)
     twist = np.zeros(6, dtype=np.float64)
     se3_log(delta, twist)
 
-    # Scale twist by s
     for i in range(6):
         twist[i] *= s
 
-    # Compute exp(s * twist)
     delta_scaled = np.zeros((4, 4), dtype=np.float64)
     se3_exp(twist, delta_scaled)
 
-    # Compute T1 * exp(s * twist)
     se3_mul(T1, delta_scaled, out)
 
 
 @njit(cache=True)
 def se3_angdist(T1: np.ndarray, T2: np.ndarray) -> float:
-    """Compute angular distance between two SE3 transforms.
-
-    Args:
-        T1: 4x4 first SE3 matrix
-        T2: 4x4 second SE3 matrix
-
-    Returns:
-        Angular distance in radians
-    """
-    # R_rel = R1^T @ R2
-    # Compute trace(R_rel) = sum of diagonal elements
+    """Compute angular distance between two SE3 transforms, in radians."""
+    # R_rel = R1^T @ R2; trace(R_rel) is the sum of its diagonal elements
+    # (computed here without forming the product)
     trace = 0.0
     for i in range(3):
         for j in range(3):
@@ -751,7 +662,6 @@ def se3_exp_ws(
     out[1, 3] = V_ws[1, 0] * vx + V_ws[1, 1] * vy + V_ws[1, 2] * vz
     out[2, 3] = V_ws[2, 0] * vx + V_ws[2, 1] * vy + V_ws[2, 2] * vz
 
-    # Bottom row
     out[3, 0] = 0.0
     out[3, 1] = 0.0
     out[3, 2] = 0.0
@@ -789,23 +699,17 @@ def se3_interp_ws(
         R_ws: Workspace buffer for rotation matrix (3,3)
         V_ws: Workspace buffer for V matrix (3,3)
     """
-    # Compute T1^-1
     se3_inverse(T1, T1_inv_ws)
 
-    # Compute delta = T1^-1 * T2
     se3_mul(T1_inv_ws, T2, delta_ws)
 
-    # Compute log(delta) using workspace variant
     se3_log_ws(delta_ws, twist_ws, omega_ws, R_ws, V_ws)
 
-    # Scale twist by s
     for i in range(6):
         twist_ws[i] *= s
 
-    # Compute exp(s * twist) using workspace variant
     se3_exp_ws(twist_ws, delta_scaled_ws, omega_ws, R_ws, V_ws)
 
-    # Compute T1 * exp(s * twist)
     se3_mul(T1, delta_scaled_ws, out)
 
 
@@ -819,13 +723,7 @@ def batch_se3_interp(
     """Interpolate between two SE3 transforms at multiple parameter values.
 
     Computes the twist log(T1^-1 * T2) once, then evaluates
-    T1 * exp(s * twist) for each s in s_values.
-
-    Args:
-        T1: 4x4 start SE3 matrix
-        T2: 4x4 end SE3 matrix
-        s_values: 1D array of interpolation parameters
-        out: (N, 4, 4) output array of SE3 matrices
+    T1 * exp(s * twist) for each s in s_values, writing into out (N, 4, 4).
     """
     T1_inv = np.zeros((4, 4), dtype=np.float64)
     se3_inverse(T1, T1_inv)

@@ -28,7 +28,6 @@ Robot Robot::from_urdf_string(const std::string& urdf_str,
 
 void Robot::init_ee_frame(const std::string& ee_frame) {
     if (ee_frame.empty()) {
-        // Default: last frame in model
         if (model_.nframes == 0) {
             throw std::runtime_error("URDF model has no frames");
         }

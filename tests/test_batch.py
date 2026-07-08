@@ -77,7 +77,7 @@ def test_batch_ik_partial_validity(robot):
     # One reachable, one far away
     T_reachable = robot.fkine(q_mid)
     T_unreachable = np.eye(4)
-    T_unreachable[:3, 3] = [100.0, 100.0, 100.0]  # Far away
+    T_unreachable[:3, 3] = [100.0, 100.0, 100.0]
 
     solver = IKSolver(robot, max_restarts=5, max_iter=10)
     result = solver.batch_ik([T_reachable, T_unreachable], q_mid)
@@ -97,7 +97,6 @@ def test_batch_ik_stop_on_failure(robot):
     T_unreachable = np.eye(4)
     T_unreachable[:3, 3] = [100.0, 100.0, 100.0]
 
-    # [reachable, unreachable, reachable] — second pose fails
     poses = [T_reachable, T_unreachable, T_reachable]
 
     solver = IKSolver(robot, max_restarts=5, max_iter=10)
@@ -106,12 +105,12 @@ def test_batch_ik_stop_on_failure(robot):
     result = solver.batch_ik(poses, q_mid, stop_on_failure=False)
     assert result.valid[0]
     assert not result.valid[1]
-    assert result.valid[2]  # Third was still attempted
+    assert result.valid[2]  # third was still attempted
 
     # With stop_on_failure: stops at second, third is zeroed + invalid
     result = solver.batch_ik(poses, q_mid, stop_on_failure=True)
     assert result.valid[0]
     assert not result.valid[1]
-    assert not result.valid[2]  # Never attempted
+    assert not result.valid[2]  # never attempted after the stop
     assert not result.all_valid
     np.testing.assert_array_equal(result.joint_positions[2], 0.0)

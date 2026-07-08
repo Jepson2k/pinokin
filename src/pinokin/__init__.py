@@ -10,10 +10,8 @@ from pinokin.numba_se3 import (
     _compute_V_inv_matrix,
     # Internal V matrix functions (exported for warmup)
     _compute_V_matrix,
-    # Comparison
     arrays_equal_6,
     arrays_equal_n,
-    # SE3 interpolation and distance
     batch_se3_interp,
     se3_angdist,
     se3_copy,
@@ -27,7 +25,7 @@ from pinokin.numba_se3 import (
     se3_interp_ws,
     se3_inverse,
     se3_log,
-    # Workspace variants (zero internal allocation)
+    # _ws variants take caller-owned workspace buffers for zero internal allocation
     se3_log_ws,
     se3_mul,
     se3_rpy,
@@ -35,12 +33,9 @@ from pinokin.numba_se3 import (
     se3_ry,
     se3_rz,
     so3_exp,
-    # SO3/SE3 from/to RPY
     so3_from_rpy,
-    # SO3/SE3 log/exp
     so3_log,
     so3_rpy,
-    # Warmup
     warmup_numba_se3,
 )
 
@@ -51,7 +46,6 @@ __all__ = [
     "Damping",
     "BatchResult",
     "CollisionChecker",
-    # Zero-allocation SE3/SO3 utilities
     "arrays_equal_6",
     "arrays_equal_n",
     "so3_from_rpy",

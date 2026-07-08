@@ -47,11 +47,9 @@ def test_warm_start_converges_faster(robot):
 
     T_target = robot.fkine(q_target)
 
-    # Cold start (random)
     solver_cold = IKSolver(robot, max_restarts=200)
     solver_cold.solve(T_target)
 
-    # Warm start from close config
     solver_warm = IKSolver(robot, max_restarts=200)
     q_near = q_target + 0.01 * np.ones(robot.nq)
     solver_warm.solve(T_target, q_near)
@@ -121,22 +119,19 @@ def test_solver_result_properties(robot):
 
 
 def test_wrist_flip_rescues_branch_violation(robot):
-    """When LM converges to a kinematically-equivalent solution where only
-    wrist joints are out of limits, the deterministic wrist-flip restart
-    should rescue it without relying on random restarts.
+    """The deterministic wrist-flip restart should rescue an out-of-limits
+    wrist branch without relying on random restarts.
 
-    Construction: pick a valid q_target, FK to T, seed with wrist_flip(q_target)
-    — LM from this seed converges to the seed itself (pose-preserving), but
-    one or more wrist joints are now OOB. The C++ wrist-flip restart should
-    flip back to the original valid configuration.
+    Seed with wrist_flip(q_target): LM converges to the seed itself
+    (pose-preserving) but with wrist joints OOB, and the C++ wrist-flip restart
+    should flip back to the valid configuration.
     """
     ql = np.asarray(robot.lower_limits)
     qu = np.asarray(robot.upper_limits)
     n = len(ql)
 
-    # Pick a q_target where wrist_flip definitely produces J4 OOB.
-    # PAROL6 J4 limits are roughly [-1.84, 1.84] rad. q_target[J4]=0.5
-    # gives seed[J4]=0.5+π≈3.64 which is OOB and has no 2π-wrap rescue.
+    # PAROL6 J4 limits are roughly [-1.84, 1.84] rad, so q_target[J4]=0.5 gives
+    # seed[J4]=0.5+π≈3.64, which is OOB with no 2π-wrap rescue.
     q_target = (ql + qu) / 2
     q_target[n - 3] = 0.5  # J4
     q_target[n - 2] = 0.7  # J5
@@ -144,7 +139,7 @@ def test_wrist_flip_rescues_branch_violation(robot):
 
     T = np.asarray(robot.fkine(q_target))
 
-    # Wrist-flip seed: pose-preserving but with wrist joints in OOB branch
+    # Wrist-flip seed: pose-preserving but with wrist joints in OOB branch.
     seed = q_target.copy()
     seed[n - 3] = q_target[n - 3] + np.pi
     seed[n - 2] = -q_target[n - 2]
@@ -161,19 +156,15 @@ def test_wrist_flip_rescues_branch_violation(robot):
 
 
 def test_solver_q_reflects_last_iterate_on_failure(robot):
-    """Regression: previously rand_q() ran after the last failed restart,
-    overwriting solver.q with random garbage and making post-failure
-    inspection impossible. After the fix, solver.q must reflect the LAST LM
-    iterate (the converged-but-rejected q or the last LM step on
-    non-convergence) — not a fresh random sample.
+    """Regression: rand_q() once ran after the last failed restart, overwriting
+    solver.q with random garbage. solver.q must reflect the last LM iterate, not
+    a fresh random sample.
 
-    Verification: FK(solver.q) on a converged-but-limits-violated case must
-    equal the original target (LM did converge). If rand_q overwrote q with
-    a uniform random sample, FK would not match the target.
+    On a converged-but-limits-violated case, FK(solver.q) must equal the target;
+    a rand_q overwrite would not match.
     """
-    # Pick a q_target where wrist_flip would produce one OOB joint, but
-    # disable wrist-flip and random rescue by forcing max_restarts=0 so we
-    # observe the very first LM convergence outcome directly.
+    # max_restarts=0 disables wrist-flip and random rescue, so we observe the
+    # very first LM convergence outcome directly.
     ql = np.asarray(robot.lower_limits)
     qu = np.asarray(robot.upper_limits)
     n = len(ql)
@@ -182,9 +173,9 @@ def test_solver_q_reflects_last_iterate_on_failure(robot):
     q_target[n - 2] = 0.7
     q_target[n - 1] = 1.0
     T = np.asarray(robot.fkine(q_target))
-    # Full wrist-flip: pose-preserving transformation that puts J4 in a
-    # branch outside its limit range. LM from this seed converges in ~1 iter
-    # (seed already satisfies the pose), but check_limits then rejects.
+    # Full wrist-flip: pose-preserving but puts J4 outside its limit range. LM
+    # from this seed converges in ~1 iter (pose already satisfied), but
+    # check_limits then rejects.
     seed = q_target.copy()
     seed[n - 3] = q_target[n - 3] + np.pi
     seed[n - 2] = -q_target[n - 2]
@@ -194,8 +185,8 @@ def test_solver_q_reflects_last_iterate_on_failure(robot):
     solver.solve(T, q0=seed)
     assert not solver.success, "expected limits rejection on wrist-flipped seed"
 
-    # Crucial: solver.q must still be the LM-converged q (FK matches target),
-    # not a random uniform overwrite.
+    # solver.q must still be the LM-converged q (FK matches target), not a
+    # random uniform overwrite.
     T_result = np.asarray(robot.fkine(solver.q))
     np.testing.assert_allclose(
         T_result[:3, 3],
@@ -206,14 +197,12 @@ def test_solver_q_reflects_last_iterate_on_failure(robot):
 
 
 def test_iterations_counter_no_double_count(robot):
-    """Regression: previously each solver added `iter` twice when LM
-    converged but check_limits rejected — once inside the convergence
-    branch, once after the inner loop. After the fix, `solver.iterations`
-    counts each LM iteration exactly once, capped at `max_iter` per attempt.
+    """Regression: each solver once added `iter` twice when LM converged but
+    check_limits rejected. `solver.iterations` must count each LM iteration
+    exactly once, capped at `max_iter` per attempt.
 
-    Construction: a wrist-flipped seed converges in 1 LM iter (FK already
-    matches), but trips check_limits. The wrist-flip restart then converges
-    in 1 more iter. Pre-fix this reported ~4 iters; post-fix should be ~2.
+    A wrist-flipped seed converges in 1 iter then trips check_limits; the restart
+    converges in 1 more. Pre-fix reported ~4 iters, post-fix ~2.
     """
     ql = np.asarray(robot.lower_limits)
     qu = np.asarray(robot.upper_limits)
@@ -231,8 +220,8 @@ def test_iterations_counter_no_double_count(robot):
     solver = IKSolver(robot, tol=1e-10, max_iter=30, max_restarts=1)
     solver.solve(T, q0=seed)
     assert solver.success
-    # Two attempts (initial wrist-flipped seed + restart), each ~1 LM iter
-    # since the seed already satisfies the pose. Counter should sum to <= 4.
+    # Two attempts (wrist-flipped seed + restart), each ~1 LM iter since the
+    # seed already satisfies the pose, so the counter should sum to <= 4.
     assert solver.iterations <= 4, (
         f"iterations counter inflated: got {solver.iterations}, expected <= 4"
     )
