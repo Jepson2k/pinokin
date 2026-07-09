@@ -25,6 +25,12 @@ jobs:
           - os: windows-latest
             arch: AMD64
     runs-on: ${{ matrix.os }}
+    env:
+      # Without an explicit target, clang stamps the build host's OS version —
+      # and macos-latest is a mixed 15/26 pool mid-rollout, so wheels came out
+      # macosx_26_0 and pip rejects them on macOS 15 hosts. Targeting 15.0
+      # yields macosx_15_0 wheels that install on both, on any runner.
+      MACOSX_DEPLOYMENT_TARGET: "15.0"
     defaults:
       run:
         shell: bash -l {0}
