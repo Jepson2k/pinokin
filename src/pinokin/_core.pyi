@@ -99,6 +99,19 @@ class CollisionChecker:
     def in_collision(self, q: NDArray[np.float64]) -> bool: ...
     def colliding_pairs(self, q: NDArray[np.float64]) -> list[tuple[str, str]]: ...
     def min_distance(self, q: NDArray[np.float64]) -> float: ...
+    def nearest_points(
+        self, q: NDArray[np.float64], names: list[str]
+    ) -> list[tuple[str, str, float, tuple[float, float, float], tuple[float, float, float]]]:
+        """Query active pairs with at least one geometry in ``names``.
+
+        Each entry is (first_name, second_name, signed_distance, first_point,
+        second_point). Points are world-frame xyz tuples in metres, in the
+        same order as the geometry names. Negative distance is penetration
+        depth. Collision margins do not affect distances or points.
+        Each pair appears once, in checker pair order; an empty selection
+        returns an empty list. Unknown geometry names raise RuntimeError.
+        """
+        ...
     def check_segment(
         self,
         q0: NDArray[np.float64],

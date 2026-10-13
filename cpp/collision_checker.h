@@ -2,6 +2,7 @@
 
 #include <optional>
 #include <string>
+#include <tuple>
 #include <vector>
 #include <utility>
 #include <unordered_map>
@@ -62,6 +63,13 @@ public:
 
     // Min distance across all enabled pairs. Negative => penetration.
     double min_distance(const Eigen::VectorXd& q) const;
+
+    using Point3 = std::tuple<double, double, double>;
+    using NearestPoints =
+        std::tuple<std::string, std::string, double, Point3, Point3>;
+    std::vector<NearestPoints> nearest_points(
+        const Eigen::VectorXd& q,
+        const std::vector<std::string>& names) const;
 
     // Linearly-interpolated segment check. Returns true if any sample
     // is in collision.
@@ -209,6 +217,8 @@ private:
 
     // Buffer reused by check_segment and check_path.
     mutable Eigen::VectorXd seg_q_;
+    mutable std::vector<bool> nearest_selected_;
+    mutable std::vector<std::size_t> nearest_pair_indices_;
 };
 
 }  // namespace pinokin

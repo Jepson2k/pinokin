@@ -42,6 +42,19 @@ namespace {
 // "No per-geometry margin override" sentinel for geom_margins_.
 constexpr double kNoMargin = std::numeric_limits<double>::quiet_NaN();
 
+// Keep witness-query settings from leaking into min_distance, even on error.
+struct NearestPointsRequest {
+    explicit NearestPointsRequest(pinokin_fcl::DistanceRequest& request)
+        : request(request), saved(request) {
+        request.enable_nearest_points = true;
+        request.enable_signed_distance = true;
+    }
+    ~NearestPointsRequest() { request = saved; }
+
+    pinokin_fcl::DistanceRequest& request;
+    const pinokin_fcl::DistanceRequest saved;
+};
+
 pinocchio::SE3 se3_from_matrix4(const Eigen::Matrix4d& T) {
     return pinocchio::SE3(T.template block<3, 3>(0, 0),
                           T.template block<3, 1>(0, 3));
@@ -152,6 +165,50 @@ double CollisionChecker::min_distance(const Eigen::VectorXd& q) const {
         }
     }
     return best;
+}
+
+std::vector<CollisionChecker::NearestPoints>
+CollisionChecker::nearest_points(
+    const Eigen::VectorXd& q, const std::vector<std::string>& names) const {
+    std::fill(nearest_selected_.begin(), nearest_selected_.end(), false);
+    for (const auto& name : names) {
+        const auto it = name_to_handle_.find(name);
+        if (it == name_to_handle_.end()) {
+            throw std::runtime_error(
+                "CollisionChecker: no geometry named '" + name + "'");
+        }
+        nearest_selected_[it->second] = true;
+    }
+
+    nearest_pair_indices_.clear();
+    const auto& pairs = geom_model_.collisionPairs;
+    const auto& objects = geom_model_.geometryObjects;
+    for (std::size_t k = 0; k < pairs.size(); ++k) {
+        const auto& pair = pairs[k];
+        if (geom_data_.activeCollisionPairs[k] &&
+            !objects[pair.first].disableCollision &&
+            !objects[pair.second].disableCollision &&
+            (nearest_selected_[pair.first] || nearest_selected_[pair.second])) {
+            nearest_pair_indices_.push_back(k);
+        }
+    }
+
+    std::vector<NearestPoints> out;
+    if (nearest_pair_indices_.empty()) return out;
+    out.reserve(nearest_pair_indices_.size());
+    update_placements(q);
+    for (const auto k : nearest_pair_indices_) {
+        const auto& pair = pairs[k];
+        const NearestPointsRequest request(geom_data_.distanceRequests[k]);
+        const auto& result = pinocchio::computeDistance(geom_model_, geom_data_, k);
+        const auto& first = result.nearest_points[0];
+        const auto& second = result.nearest_points[1];
+        out.emplace_back(objects[pair.first].name, objects[pair.second].name,
+                         result.min_distance,
+                         Point3(first[0], first[1], first[2]),
+                         Point3(second[0], second[1], second[2]));
+    }
+    return out;
 }
 
 bool CollisionChecker::check_segment(const Eigen::VectorXd& q0,
@@ -579,6 +636,9 @@ void CollisionChecker::populate_default_pairs() {
 
 void CollisionChecker::rebuild_geom_data_() {
     geom_data_ = pinocchio::GeometryData(geom_model_);
+    nearest_selected_.resize(geom_model_.geometryObjects.size());
+    nearest_pair_indices_.clear();
+    nearest_pair_indices_.reserve(geom_model_.collisionPairs.size());
     // Pinocchio enables coal's deprecated GJK warm-start by default
     // (geometry.hxx sets enable_cached_gjk_guess = true). The cached guess
     // can produce false-negatives when a colliding query follows a sequence
