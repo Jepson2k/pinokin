@@ -3,6 +3,7 @@
 #include <nanobind/stl/string.h>
 #include <nanobind/stl/vector.h>
 #include <nanobind/stl/pair.h>
+#include <nanobind/stl/tuple.h>
 #include <nanobind/stl/optional.h>
 
 #include "robot.h"
@@ -122,6 +123,8 @@ NB_MODULE(_core, m) {
         .def("in_collision", &CollisionChecker::in_collision, nb::arg("q"))
         .def("colliding_pairs", &CollisionChecker::colliding_pairs, nb::arg("q"))
         .def("min_distance", &CollisionChecker::min_distance, nb::arg("q"))
+        .def("nearest_points", &CollisionChecker::nearest_points,
+             nb::arg("q"), nb::arg("names"))
         .def("check_segment", &CollisionChecker::check_segment,
              nb::arg("q0"), nb::arg("q1"), nb::arg("n_steps"),
              nb::arg("include_endpoints") = true)

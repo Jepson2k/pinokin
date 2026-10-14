@@ -102,6 +102,68 @@ def test_add_obstacle_box_collides(collision_robot, fresh_checker):
     assert fresh_checker.in_collision(np.zeros(collision_robot.nq)) is True
 
 
+def test_nearest_points_filters_pairs_and_reports_signed_world_witnesses(fresh_checker):
+    q = np.zeros(2)
+    links = {link: name for name, link in fresh_checker.geometry_link_names}
+    pose = np.eye(4)
+    pose[:3, 3] = (0.125, 0.125, 0.9)
+    fresh_checker.add_obstacle_box("probe", np.full(3, 0.05), pose)
+    far = np.eye(4)
+    far[0, 3] = -3.0
+    fresh_checker.add_obstacle_box("unselected", np.full(3, 0.05), far)
+
+    before = fresh_checker.min_distance(q)
+    pairs = fresh_checker.nearest_points(q, ["probe"])
+    assert {first for first, *_ in pairs} == set(links.values())
+    assert all(second == "probe" for _, second, *_ in pairs)
+    first, second, distance, arm_point, obstacle_point = min(pairs, key=lambda p: p[2])
+    assert (first, second) == (links["L2"], "probe")
+    assert distance == pytest.approx(np.sqrt(3) * 0.05, abs=1e-7)
+    np.testing.assert_allclose(arm_point, (0.025, 0.025, 0.8), atol=1e-7)
+    np.testing.assert_allclose(obstacle_point, (0.075, 0.075, 0.85), atol=1e-7)
+    assert fresh_checker.min_distance(q) == pytest.approx(before)
+    assert fresh_checker.nearest_points(q, []) == []
+    with pytest.raises(RuntimeError, match="no geometry named"):
+        fresh_checker.nearest_points(q, ["missing"])
+
+    selected = fresh_checker.nearest_points(q, ["probe", links["L2"], "probe"])
+    assert all(a in ("probe", links["L2"]) or b in ("probe", links["L2"]) for a, b, *_ in selected)
+    assert len(selected) == len({(a, b) for a, b, *_ in selected})
+
+    names = fresh_checker.geometry_names
+    fresh_checker.remove_collision_pair(names.index(links["L2"]), names.index("probe"))
+    assert all(a != links["L2"] for a, *_ in fresh_checker.nearest_points(q, ["probe"]))
+    fresh_checker.add_collision_pair(names.index(links["L2"]), names.index("probe"))
+
+    # L2 rotates about X at z=0.1; its far corner moves into negative Y.
+    pose[:3, 3] = (0.125, -0.8, 0.225)
+    fresh_checker.set_geometry_pose_by_name("probe", pose)
+    rotated = fresh_checker.nearest_points(np.array([np.pi / 2, 0.0]), ["probe"])
+    nearest = min(rotated, key=lambda p: p[2])
+    assert nearest[2] == pytest.approx(np.sqrt(3) * 0.05, abs=1e-7)
+    np.testing.assert_allclose(nearest[3], (0.025, -0.7, 0.125), atol=1e-7)
+    np.testing.assert_allclose(nearest[4], (0.075, -0.75, 0.175), atol=1e-7)
+
+    pose[:3, 3] = (0.065, 0.0, 0.6)
+    fresh_checker.set_geometry_pose_by_name("probe", pose)
+    before = fresh_checker.min_distance(q)
+    nearest = min(fresh_checker.nearest_points(q, ["probe"]), key=lambda p: p[2])
+    assert nearest[2] == pytest.approx(-0.01, abs=1e-7)
+    assert np.linalg.norm(np.subtract(nearest[3], nearest[4])) == pytest.approx(0.01, abs=1e-7)
+    assert fresh_checker.min_distance(q) == pytest.approx(before)
+
+    placement = np.eye(4)
+    placement[2, 3] = 0.5
+    fresh_checker.attach_box_to_frame("tool", np.full(3, 0.02), "L2", placement)
+    pose[:3, 3] = (0.1, 0.1, 1.0)
+    fresh_checker.set_geometry_pose_by_name("probe", pose)
+    pairs = fresh_checker.nearest_points(q, ["probe"])
+    tool_pair = next(pair for pair in pairs if pair[:2] == ("probe", "tool"))
+    assert tool_pair[2] == pytest.approx(np.sqrt(3) * 0.03, abs=1e-7)
+    np.testing.assert_allclose(tool_pair[3], (0.05, 0.05, 0.95), atol=1e-7)
+    np.testing.assert_allclose(tool_pair[4], (0.02, 0.02, 0.92), atol=1e-7)
+
+
 def test_remove_obstacle_clears(collision_robot, fresh_checker):
     pose = np.eye(4)
     pose[2, 3] = 0.25
